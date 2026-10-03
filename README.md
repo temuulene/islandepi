@@ -1,4 +1,4 @@
-# islandepi
+# islandepi <a href="https://temuulene.github.io/islandepi/"><img src="man/figures/logo.png" align="right" height="139" alt="islandepi website" /></a>
 
 Validated epidemiological methods for Island Health analyses.
 
