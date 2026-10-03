@@ -1,0 +1,557 @@
+---
+title: "Routine surveillance with islandepi"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Routine surveillance with islandepi}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+library(islandepi)
+```
+
+This guide demonstrates a small, complete workflow for daily or weekly
+surveillance. Every chunk is evaluated when the pkgdown site is built, so the
+tables below are actual package output.
+
+The package handles reusable mechanics. It does not decide case definitions,
+alert policy or the public-health response to a statistical exceedance.
+
+## Example event data
+
+`islh_outbreak` is a simulated line list bundled with the package: 790 cases
+of a winter respiratory virus across Island Health, from November 2025 to
+March 2026. It was simulated with the
+[simulist](https://epiverse-trace.github.io/simulist/) package, so onsets,
+reporting delays, ages and admissions behave like real surveillance data. No
+record describes a real person.
+
+```{r event-data}
+events <- islh_outbreak
+head(events)
+```
+
+## Check the records first
+
+`islh_check_events()` returns one row for every problem. It does not alter the
+line list or remove affected records.
+
+```{r clean-event-check}
+islh_check_events(
+  events,
+  id = case_id,
+  date = date_onset,
+  required = c(hsda, case_type),
+  max_date = "2026-03-08"
+)
+```
+
+A deliberately damaged copy shows the review output:
+
+```{r issue-example}
+events_with_issues <- events[1:5, ]
+events_with_issues$case_id[2] <- events_with_issues$case_id[1]
+events_with_issues$date_onset[3] <- NA
+events_with_issues$hsda[4] <- NA
+
+islh_check_events(
+  events_with_issues,
+  id = case_id,
+  date = date_onset,
+  required = hsda,
+  max_date = "2026-03-08"
+)
+```
+
+Use the `.row` values to display the affected source records to the data owner.
+
+Two more checks catch coding and entry errors. `allowed` lists the permitted
+values of a coded field, and `date_order` names dates that must not come
+before another, written `c(later = "earlier")`:
+
+```{r issue-codes}
+events_with_issues$sex[5] <- "F"
+events_with_issues$date_reported[1] <- events_with_issues$date_onset[1] - 2
+
+islh_check_events(
+  events_with_issues,
+  id = case_id,
+  date = date_onset,
+  max_date = "2026-03-08",
+  allowed = list(sex = c("Female", "Male")),
+  date_order = c(date_reported = "date_onset")
+)
+```
+
+When one person can have several legitimate records, such as encounters on
+different days, pass the columns that together identify a record, for example
+`id = c(person_id, encounter_date)`.
+
+## Create complete daily counts
+
+`groups` lists the areas that must appear even when an area has no cases on
+some days. `fill = TRUE` also creates the days when nobody fell ill, so a quiet
+day shows as a zero rather than a missing row. The window runs from Monday
+3 November 2025 to Sunday 8 March 2026, whole weeks, so no events fall in
+partial weeks later.
+
+```{r daily-counts}
+hsdas <- c(
+  "South Vancouver Island",
+  "Central Vancouver Island",
+  "North Vancouver Island"
+)
+
+daily <- islh_count_events(
+  events,
+  date = date_onset,
+  id = case_id,
+  by = hsda,
+  interval = "day",
+  from = "2025-11-03",
+  to = "2026-03-08",
+  fill = TRUE,
+  groups = hsdas
+)
+
+head(daily, 6)
+```
+
+For CDC epidemiological weeks, use `interval = "epiweek"`. ISO weeks use
+`"isoweek"`. For a locally anchored week, use `"week"` and provide
+`week_start`, where 1 is Monday and 7 is Sunday.
+
+```{r weekly-counts}
+weekly <- islh_count_events(
+  daily,
+  date = period_start,
+  count = count,
+  by = hsda,
+  interval = "week",
+  week_start = 1,
+  from = "2025-11-03",
+  to = "2026-03-08",
+  fill = TRUE
+)
+
+head(weekly, 6)
+```
+
+The result uses period start and end dates rather than a hand-built week number.
+That removes special January and December corrections from report scripts.
+
+Summing daily counts into weeks is safe here because each case has one record.
+With `id`, `islh_count_events()` counts distinct people within each day, so a
+person with records on two days of the same week would be counted twice in
+the weekly sum. The daily result records how many identifiers appear on more
+than one day, and summing it warns when that number is not zero. To count
+people per week in that case, recount the line list with
+`interval = "week"`.
+
+## Calculate a transparent baseline
+
+A reference period should describe what is usual for the time of year. For a
+seasonal illness, that means the same weeks in earlier seasons, often with a
+few weeks either side. `islh_reference_periods()` lists them. Leave out
+seasons that were not usual, and say so in the report.
+
+`islh_seasons` holds seven simulated seasons of weekly counts. Its 2020-21
+season barely rose, so it is excluded here:
+
+```{r matched-reference}
+matched_weeks <- islh_reference_periods(
+  "2026-01-26",
+  years_back = 5,
+  window = 2,
+  exclude = data.frame(from = "2020-09-01", to = "2021-08-31")
+)
+range(matched_weeks)
+length(matched_weeks)
+
+matched <- islh_surveillance_baseline(
+  islh_seasons,
+  date = period_start,
+  value = count,
+  by = hsda,
+  reference_periods = matched_weeks
+)
+matched[c("hsda", "reference_n", "reference_mean", "upper_limit")]
+```
+
+ISO and epidemiological weeks keep their week number from year to year, and
+ordinary weeks take the nearest week a year back, so the reference does not
+drift by a day each year.
+
+`islh_outbreak` covers one season only, so the snapshot example below uses its
+first eight weeks, November and December, as a stand-in reference. That
+choice is for illustration: it compares peak-season weeks with the start of
+the season, so it flags more weeks than a matched reference would.
+
+```{r baseline}
+reference_weeks <- sort(unique(weekly$period_start))[1:8]
+
+baseline <- islh_surveillance_baseline(
+  weekly,
+  date = period_start,
+  value = count,
+  by = hsda,
+  reference_periods = reference_weeks,
+  method = "mean_sd",
+  multiplier = 2,
+  prediction_adjustment = TRUE,
+  minimum_periods = 4
+)
+
+baseline[c("hsda", "reference_n", "reference_mean", "upper_limit")]
+```
+
+`reference_n` and `reference_adjustment` make the calculation auditable. The
+adjustment is derived from the number of periods rather than hardcoded.
+`method = "range"` returns the historical minimum and maximum, while
+`method = "quantile"` uses the supplied probabilities.
+
+The default screen is strictly above `upper_limit`. Choose
+`comparison = "at_or_above"` explicitly to include equality. A zero current
+count against a zero limit is unflagged by default. These are descriptive
+screens, not calibrated outbreak probabilities or 95% prediction limits.
+Mean-SD references require at least two observations, and all requested
+reference periods must be present and complete. Reference dates and method
+parameters are retained in `attr(baseline, "islh_reference")`.
+
+## Build the current seven-day table
+
+```{r snapshot}
+snapshot <- islh_surveillance_snapshot(
+  daily,
+  date = period_start,
+  value = count,
+  by = hsda,
+  end = "2026-02-01",
+  periods = 7,
+  baseline = baseline,
+  include_total = FALSE
+)
+
+snapshot[c("hsda", "total", "upper_limit", "exceeds_reference")]
+```
+
+In the week of 26 January, near the peak of the wave, the North Island's
+total is above its early-season upper limit, and the South Island is just
+under its own. That is what the screen is for: a signal to look at, not a
+finding. Against a matched reference from earlier seasons, a winter peak would
+only stand out if it were larger than usual for late January. The full table also holds the seven daily columns and every
+reference statistic.
+
+The seven displayed daily counts add to one weekly total, so the weekly
+baseline above is comparable with `total`. A seven-day total must not be
+compared with a baseline calculated from individual daily counts, and the
+function refuses to: both tables carry the reporting period they were built
+with, and mismatched durations stop with an error rather than producing a table
+whose limits are seven times too small. If you display a different window,
+calculate the baseline from historical totals of that same duration.
+
+Metadata travels as attributes; transformations may retain stale attributes
+or discard them. Functions validate actual period alignment and coverage. If you reshape a table between steps, name the reporting period
+explicitly: pass `interval` to `islh_surveillance_baseline()`, or
+`baseline_interval` to `islh_surveillance_snapshot()` for limits that came from
+somewhere else entirely, such as last season's totals held in a spreadsheet.
+
+The daily columns, `total` and baseline fields are ordinary data. Export them
+with the package required by the report, or pass the result to
+`islandbrand::islh_gt()` or `islandbrand::islh_flextable()`.
+
+Only use `include_total = TRUE` when the groups are mutually exclusive. If a
+record can contribute to more than one group, calculate the overall total from
+the unduplicated event data instead.
+
+## Separate missing feeds from quiet days
+
+A filled count table cannot tell a site that reported no cases from a site
+whose data did not arrive. Both show zero. `islh_check_coverage()` compares a
+log of received submissions, one row per file, extract or nil report, with the
+sites that should report.
+
+The log below is simulated: every HSDA sends one file a day, except that the
+North Island's files for 29 and 30 January did not arrive.
+
+```{r coverage}
+days <- seq(as.Date("2026-01-26"), as.Date("2026-02-01"), by = "day")
+submissions <- expand.grid(hsda = hsdas, date = days, stringsAsFactors = FALSE)
+missing_files <- submissions$hsda == "North Vancouver Island" &
+  submissions$date %in% as.Date(c("2026-01-29", "2026-01-30"))
+submissions <- submissions[!missing_files, ]
+
+coverage <- islh_check_coverage(
+  submissions,
+  date = date,
+  by = hsda,
+  expected = hsdas,
+  from = "2026-01-26",
+  to = "2026-02-01"
+)
+coverage[!coverage$received, c("hsda", "period_start", "received")]
+```
+
+Remove the periods that were not received from the counts, then build the
+snapshot with `missing_periods = "missing"`. The North Island now shows an
+unknown total rather than a total that quietly misses two days:
+
+```{r coverage-snapshot}
+received <- coverage[coverage$received, c("hsda", "period_start")]
+known <- merge(daily, received)
+
+gated <- islh_surveillance_snapshot(
+  known,
+  date = period_start,
+  value = count,
+  by = hsda,
+  end = "2026-02-01",
+  periods = 7,
+  interval = "day",
+  baseline = baseline,
+  baseline_interval = "week",
+  missing_periods = "missing"
+)
+
+gated[c("hsda", "total", "complete", "exceeds_reference")]
+```
+
+`merge()` drops the reporting-period metadata, so the snapshot takes the
+interval from the dates and the baseline duration from `baseline_interval`.
+
+## Compare with earlier periods
+
+`islh_compare_periods()` puts the current week beside the previous week, the
+same week last year, or the season so far against the same stretch of last
+season. Every row names the dates it covers:
+
+```{r compare-periods}
+comparison <- islh_compare_periods(
+  islh_seasons,
+  date = period_start,
+  value = count,
+  by = hsda,
+  current = "2026-01-26",
+  comparison = c("previous_period", "previous_year", "season_to_date"),
+  season_start = "2025-09-01"
+)
+comparison[
+  comparison$hsda == "North Vancouver Island",
+  c("comparison", "reference_from", "current", "reference", "percent_change")
+]
+```
+
+`ratio` and `percent_change` are `NA` when the reference is zero: a rise from
+0 to 3 cases has no size as a percentage, so report the counts. A missing week
+in either window gives a missing comparison rather than a smaller total.
+
+`islh_reporting_calendar()` gives any date its week-year, fiscal-year and
+season labels, using the same rules:
+
+```{r reporting-calendar}
+islh_reporting_calendar(
+  c("2025-12-28", "2025-12-29", "2026-01-26"),
+  season_start_month = 9
+)
+```
+
+## Recent counts are incomplete
+
+Counts by onset date fall away in the last few days because those cases have
+not all been reported yet. `islh_reporting_delay()` summarizes the delays.
+With `as_of`, it sees the data as they stood on that date, leaving out cases
+reported later:
+
+```{r reporting-delay}
+islh_reporting_delay(
+  events,
+  onset = date_onset,
+  report = date_reported,
+  by = hsda,
+  as_of = "2026-01-20",
+  max_delay = 10
+)
+```
+
+`max_delay` uses only onsets old enough for every delay up to that many days
+to have been seen. Without it, the recent cases, which are the quickly
+reported ones, make delays look shorter than they are.
+
+`islh_reporting_completeness()` turns those delays into an expected share
+reported for each recent onset date:
+
+```{r reporting-completeness}
+completeness <- islh_reporting_completeness(
+  events,
+  onset = date_onset,
+  report = date_reported,
+  as_of = "2026-01-20",
+  max_delay = 10
+)
+completeness$expected_complete <- round(completeness$expected_complete, 2)
+tail(completeness, 5)
+```
+
+On 20 January, cases with onset on 18 January were only about half reported.
+Label the last few days of an epidemic curve as incomplete rather than read
+the drop as a decline.
+
+## Encounters or people?
+
+`islh_encounters` holds four weeks of simulated encounters from three sites.
+Some people come back, and three records were resent in a later file. First
+find the resent records:
+
+```{r encounters-check}
+issues <- islh_check_events(
+  islh_encounters,
+  id = encounter_id,
+  date = encounter_date,
+  max_date = "2026-08-30"
+)
+table(issues$.issue)
+unique_encounters <- islh_encounters[!duplicated(islh_encounters), ]
+```
+
+Counting rows counts encounters; counting `id` counts people. Distinct people
+per day cannot simply be added up into distinct people per week, because a
+person seen on two days of a week would count twice. The daily count records
+how many people appear on more than one day, and summing it warns:
+
+```{r encounters-people, warning=TRUE}
+daily_people <- islh_count_events(
+  unique_encounters,
+  date = encounter_date,
+  id = person_id,
+  from = "2026-08-03",
+  to = "2026-08-30"
+)
+
+weekly_sum <- islh_count_events(
+  daily_people,
+  date = period_start,
+  count = count,
+  interval = "week",
+  from = "2026-08-03",
+  to = "2026-08-30"
+)
+```
+
+To count people per week, count the line list at the weekly interval:
+
+```{r encounters-weekly}
+weekly_people <- islh_count_events(
+  unique_encounters,
+  date = encounter_date,
+  id = person_id,
+  interval = "week",
+  from = "2026-08-03",
+  to = "2026-08-30"
+)
+data.frame(
+  week = weekly_people$period_start,
+  summed_daily = weekly_sum$count,
+  people = weekly_people$count
+)
+```
+
+`islh_feed_log` records which daily files arrived. Site C's files for 12 and
+13 August are missing, while Site B sent nil reports on days it had no
+encounters. `islh_check_coverage()` tells them apart:
+
+```{r encounters-coverage}
+feed_coverage <- islh_check_coverage(
+  islh_feed_log,
+  date = date,
+  by = site,
+  expected = c("Site A", "Site B", "Site C"),
+  from = "2026-08-03",
+  to = "2026-08-30"
+)
+feed_coverage[!feed_coverage$received, c("site", "period_start")]
+```
+
+## Model-based detection
+
+The baselines above are descriptive screens. For a detection method with a
+stated false-alarm rate, `islh_farrington()` runs the improved Farrington
+algorithm from the surveillance package on weekly counts. It needs several
+years of history, and it needs local evaluation: run it over past seasons,
+count the alarms, and set `alpha` so the alert burden is workable.
+
+```{r farrington, eval=requireNamespace("surveillance", quietly = TRUE)}
+detection <- islh_farrington(
+  islh_seasons,
+  date = period_start,
+  value = count,
+  by = hsda,
+  from = "2025-12-29",
+  to = "2026-01-26"
+)
+detection$expected <- round(detection$expected, 1)
+detection[
+  detection$hsda == "South Vancouver Island",
+  c("period_start", "observed", "expected", "upper_limit", "alarm")
+]
+```
+
+Install surveillance with `install.packages("surveillance", type = "binary")`
+to use it. The rest of `islandepi` does not need it.
+
+## Plot the counts
+
+`islandepi` intentionally returns data rather than imposing a figure style. Use
+`islandbrand::islh_epi_curve()` to create the Island Health figure:
+
+```{r plot-setup, include=FALSE, eval=requireNamespace("islandbrand", quietly = TRUE)}
+# R CMD check replays this code on the pdf device, which stops on a font
+# family it does not know. islh_setup() picks a family that is installed.
+islandbrand::islh_setup(format = "plots", quiet = TRUE)
+```
+
+```{r plot-example, eval=requireNamespace("islandbrand", quietly = TRUE), fig.width=8, fig.height=4.5, fig.alt="Stacked weekly case counts by health service delivery area from November 2025 to March 2026. Cases rise to a first peak in mid-December, dip over the holidays, peak again in late January and fall away by March. South Vancouver Island has the most cases each week."}
+# Short labels keep the legend on one line.
+weekly$area <- sub(" Vancouver Island", " Island", weekly$hsda)
+
+islandbrand::islh_epi_curve(
+  weekly,
+  date = period_start,
+  count = count,
+  fill = area,
+  labels = "total",
+  title = "Weekly cases by health service delivery area",
+  subtitle = "By week of symptom onset, November 2025 to March 2026",
+  caption = "Source: simulated outbreak (islh_outbreak). Not real surveillance data."
+) +
+  ggplot2::labs(fill = NULL)
+```
+
+The published package website installs `islandbrand` and evaluates this example.
+When this vignette is built on a computer without `islandbrand`, only the plot
+is skipped; all analytical examples still run.
+
+## Coverage and reporting calendar
+
+Timestamp conversion defaults to `America/Vancouver`; supply `timezone` to
+change the reporting calendar explicitly. Both the first and last incomplete
+periods are excluded by default from counts, and a message says how many
+events that left out. Preaggregated weekly counts cannot be relabelled to a
+different week start.
+
+Snapshots fail on missing source periods by default. Use
+`missing_periods = "missing"` to propagate unknown values and `complete = FALSE`.
+Use `missing_periods = "zero"` only after confirming those absent records mean
+zero activity; that decision is recorded in `islh_screening`. Event-grid
+completion likewise assumes that `from` and `to` describe confirmed coverage;
+use `islh_check_coverage()` to confirm it.
+
+Grouping columns must not share a name with a column the functions create,
+such as `total`, `complete` or `upper_limit`. Rename them first; the functions
+stop rather than overwrite the group labels.

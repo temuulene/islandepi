@@ -1,0 +1,452 @@
+---
+title: "Getting started with islandepi"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with islandepi}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+library(islandepi)
+```
+
+`islandepi` provides small, validated functions for routine public health
+analysis. Every example on this page is evaluated when the website is built,
+so the printed values are actual package output.
+
+The package implements calculation mechanics. It does not choose the
+suppression threshold, standard population or interval method for a release.
+
+## Choose the function
+
+| Task | Function | Output |
+|---|---|---|
+| Group individual ages | `islh_age_group()` | Ordered factor |
+| Attach denominators with checked keys | `islh_join_denominator()` | Counts with a denominator column |
+| Calculate a crude rate | `islh_crude_rate()` | Data frame with rate and interval |
+| Calculate a proportion or percentage | `islh_proportion()` | Data frame with estimate and interval |
+| Calculate a Poisson count interval | `islh_ci_poisson()` | Data frame with lower and upper limits |
+| Calculate a directly standardized rate | `islh_dsr_joined()`, `islh_dsr()` | One-row data frame |
+| Get a published standard population | `islh_standard_population()` | Age bands with weights |
+| See which strata drive a standardized rate | `islh_dsr_detail()` | One row per stratum |
+| Hide small counts | `islh_suppress()` | Numeric or labelled character vector |
+| Apply suppression to a table | `islh_suppress_table()` | Updated data frame |
+| Round counts | `islh_round_base()` | Numeric vector |
+| Compare with an existing report | `islh_compare_outputs()` | Differences, one row per cell |
+| Retrieve BC denominators | `islh_bc_population()` | Tidy population table |
+| Retrieve BC boundaries | `islh_bc_geography()` | Standardized `sf` object |
+
+## Example data
+
+The examples use `islh_outbreak`, a simulated line list bundled with the
+package: 790 cases of a winter respiratory virus across Island Health's local
+health areas, November 2025 to March 2026. It was simulated with the
+[simulist](https://epiverse-trace.github.io/simulist/) package. No record
+describes a real person.
+
+```{r example-data}
+head(islh_outbreak[c("case_id", "age", "sex", "date_onset", "hsda", "lha_name")])
+```
+
+## Group ages
+
+The result is an ordered factor, which preserves the correct order in tables
+and plots.
+
+```{r age-groups}
+cases <- islh_outbreak
+cases$age_group <- islh_age_group(cases$age, breaks = "broad")
+table(cases$age_group)
+```
+
+Built-in choices are `"five_year"`, `"phac"` and `"broad"`. A local set of
+lower bounds also works:
+
+```{r custom-age-groups}
+islh_age_group(c(2, 17, 42, 91), breaks = c(0, 18, 65))
+```
+
+Missing ages become `NA`. Negative ages also become `NA`, with a warning,
+because they usually point to a wrong birth or event date. Check those rows
+before calculating a rate rather than silently dropping them.
+
+## Crude rates
+
+`islh_crude_rate()` returns the numerator and denominator beside the estimate
+and confidence limits, making the calculation easy to audit.
+
+The case counts come from the simulated outbreak. The denominators are BC
+Stats' 2025 population estimates for each health service delivery area.
+
+Keep counts and denominators in separate tables and join them on explicit
+keys. `islh_join_denominator()` stops if a count has no denominator, if the
+denominator table has more than one row for a key, or if a key is text in one
+table and a number in the other:
+
+```{r crude-rate}
+hsda_population <- data.frame(
+  hsda = c(
+    "South Vancouver Island",
+    "Central Vancouver Island",
+    "North Vancouver Island"
+  ),
+  population = c(464081, 320319, 143305)
+)
+hsda_cases <- as.data.frame(table(hsda = cases$hsda), responseName = "cases")
+hsda_cases$hsda <- as.character(hsda_cases$hsda)
+
+by_hsda <- islh_join_denominator(hsda_cases, hsda_population, by = "hsda")
+
+crude <- islh_crude_rate(
+  cases = by_hsda$cases,
+  population = by_hsda$population,
+  per = 100000
+)
+cbind(
+  by_hsda["hsda"],
+  round(crude[c("cases", "population", "rate", "lower", "upper")], 1)
+)
+```
+
+Read each row as that area's cases in its population, expressed per 100,000
+people, with the chosen Poisson interval. Counts may exceed the denominator
+when the numerator contains repeat events and the denominator is person-time.
+
+`method` records which interval each row actually used. The default,
+`method = "auto"`, takes the exact interval for counts below 10 and Byar's
+approximation from 10 upwards. Set `method` explicitly when a release has to
+match a published series that used one method throughout. The result also
+carries `conf` and `per`, so a saved table records how it was calculated.
+
+## Proportions and percentages
+
+Use `islh_proportion()` when the outcome is a share of an eligible group, such
+as immunization coverage, test positivity or the share of cases admitted to
+hospital. The numerator must be a subset of the denominator.
+
+```{r proportion}
+admitted <- tapply(!is.na(cases$date_admission), cases$hsda, sum)
+total <- tapply(cases$case_id, cases$hsda, length)
+
+share <- islh_proportion(admitted, total, per = 100)
+cbind(
+  hsda = names(total),
+  round(share[c("x", "n", "proportion", "lower", "upper")], 1)
+)
+```
+
+The default Wilson score interval stays within 0 to 100% and keeps close to
+its stated coverage for small denominators. Use `method = "exact"` for the
+Clopper-Pearson interval when a series requires it. Decide how records with
+an unknown status are handled before calculating, and say so in the table
+notes. Survey-weighted prevalence needs a method that accounts for the survey
+design, not these intervals.
+
+## Poisson count intervals
+
+```{r poisson-intervals}
+islh_ci_poisson(c(0, 3, 25))
+```
+
+The default picks a method per count: exact below 10, Byar at 10 and above.
+Set `method = "exact"` or `method = "byar"` to use one method throughout, as
+an analytical standard may require. `"byar"` is an approximation and falls
+back to the exact interval when the count is zero, because Byar's is undefined
+there.
+
+## Directly standardized rates
+
+Keep cases, population and the standard population in three tables keyed by
+age group. `islh_dsr_joined()` lines them up by key and stops unless all three
+cover exactly the same strata, so a table in a different row order, or one
+missing an age band, cannot give a wrong rate.
+
+`islh_standard_population()` returns a published standard in the bands you
+ask for. There is no default: use the standard your comparison series uses.
+The case and population figures below are illustrative.
+
+```{r standardized-rate}
+standard <- islh_standard_population("canada_2011", age_breaks = c(0, 20, 45, 65))
+standard$age_group <- as.character(standard$age_group)
+standard[c("age_group", "population", "weight")]
+
+age_cases <- data.frame(
+  age_group = c("0-19", "20-44", "45-64", "65+"),
+  cases = c(5, 12, 40, 80)
+)
+age_population <- data.frame(
+  age_group = c("65+", "45-64", "20-44", "0-19"),
+  population = c(15000, 22000, 25000, 20000)
+)
+
+dsr <- islh_dsr_joined(
+  age_cases,
+  age_population,
+  standard,
+  by = "age_group",
+  standard_id = standard$standard_id[1]
+)
+round(dsr[c("cases", "population", "rate", "lower", "upper")], 1)
+```
+
+The returned `population` is the total observed denominator. The standard
+population is converted to weights and is not added to the result.
+`standard_id` records which standard was used. `method = "gamma"` uses the
+Fay-Feuer interval; `"normal"` is available for comparison with analyses that
+explicitly require it. `islh_dsr()` takes the same inputs as vectors already
+in stratum order.
+
+`islh_dsr_detail()` shows how each stratum feeds the result. The
+contributions add up to the standardized rate, and `variance_share` shows which
+strata make the interval wide:
+
+```{r dsr-detail}
+detail <- islh_dsr_detail(dsr)
+detail$rate <- round(detail$rate, 1)
+detail$contribution <- round(detail$contribution, 1)
+detail$variance_share <- round(detail$variance_share, 2)
+detail
+```
+
+Here the two oldest bands carry more than 80% of the variance, because their
+rates are highest and their populations are smaller. In a small area, one or
+two sparse strata can dominate like this. Broader bands, a longer period or a
+larger area help, applied the same way to every rate being compared.
+
+Standardization answers one question: would two populations differ if they
+had the same age structure? In the example below, both areas have exactly the
+same rate in every age band. Area B is older, so its crude rate is higher, but
+the standardized rates are identical:
+
+```{r same-risk}
+same_risk <- data.frame(
+  age_group = c("0-19", "20-44", "45-64", "65+"),
+  rate_per_person = c(0.0002, 0.0005, 0.0020, 0.0060)
+)
+area_a <- data.frame(
+  age_group = same_risk$age_group,
+  population = c(30000, 40000, 20000, 10000)
+)
+area_b <- data.frame(
+  age_group = same_risk$age_group,
+  population = c(15000, 26000, 30000, 30000)
+)
+area_a$cases <- round(area_a$population * same_risk$rate_per_person)
+area_b$cases <- round(area_b$population * same_risk$rate_per_person)
+
+rates <- rbind(
+  area_a = c(
+    crude = sum(area_a$cases) / sum(area_a$population) * 1e5,
+    standardized = islh_dsr_joined(
+      area_a[c("age_group", "cases")],
+      area_a[c("age_group", "population")],
+      standard,
+      by = "age_group",
+      standard_id = standard$standard_id[1]
+    )$rate
+  ),
+  area_b = c(
+    crude = sum(area_b$cases) / sum(area_b$population) * 1e5,
+    standardized = islh_dsr_joined(
+      area_b[c("age_group", "cases")],
+      area_b[c("age_group", "population")],
+      standard,
+      by = "age_group",
+      standard_id = standard$standard_id[1]
+    )$rate
+  )
+)
+round(rates, 1)
+```
+
+A crude rate is still the right number for planning services, because it
+describes the burden in the population as it is. Report both, and say which
+one a comparison uses.
+
+## Suppress small cells
+
+There is deliberately no default threshold. Supply the approved rule for the
+specific release.
+
+```{r suppress-vector}
+counts <- c(0, 3, 5, 17, 42)
+islh_suppress(counts, threshold = 5, label = "Suppressed")
+```
+
+Zero is kept because it is an observed absence, not a small positive count.
+With the default `inclusive = TRUE`, both 3 and 5 are suppressed.
+
+For a table, count the simulated cases and admissions in each North Island
+local health area. The small areas have few cases, and fewer admissions:
+
+```{r suppress-table}
+north <- cases[cases$hsda == "North Vancouver Island", ]
+area_counts <- data.frame(
+  area = sort(unique(north$lha_name)),
+  cases = as.vector(table(north$lha_name)),
+  admitted = as.vector(tapply(
+    !is.na(north$date_admission),
+    north$lha_name,
+    sum
+  ))
+)
+area_counts
+
+islh_suppress_table(
+  area_counts,
+  cols = c("cases", "admitted"),
+  threshold = 5,
+  label = "Suppressed"
+)
+```
+
+A rate or confidence limit calculated from a hidden count gives the count
+away: multiply the rate by the population and it is back. `linked` hides
+those columns in the same rows:
+
+```{r linked-suppression}
+area_rates <- area_counts
+area_rates$rate <- round(area_rates$admitted / area_rates$cases * 100, 1)
+
+islh_suppress_table(
+  area_rates,
+  cols = "admitted",
+  threshold = 5,
+  linked = list(admitted = "rate")
+)
+```
+
+Linked cells become `NA` and keep the column numeric. Set `linked_label` to
+show a neutral label instead. Either way, the audit records them with the
+reason `"linked"`.
+
+Complementary suppression can hide a second cell when one hidden value could
+be recovered from a visible total:
+
+```{r complementary-suppression}
+islh_suppress_table(
+  area_counts,
+  cols = "cases",
+  threshold = 5,
+  label = "Suppressed",
+  complementary = TRUE
+)
+```
+
+By default the complementary rule looks at the whole column, which is right
+for a table carrying one overall total. Where a table is subtotalled, name the
+subtotal columns with `by` so the rule runs inside each block:
+
+```{r grouped-suppression}
+by_authority <- data.frame(
+  authority = c("Island", "Island", "Interior", "Interior"),
+  area = c("North", "South", "East", "West"),
+  cases = c(2, 30, 4, 25)
+)
+
+hidden <- islh_suppress_table(
+  by_authority,
+  cols = "cases",
+  threshold = 5,
+  label = "Suppressed",
+  complementary = TRUE,
+  by = "authority"
+)
+
+hidden
+```
+
+Column-wide, two cells are small and the arithmetic already fails to close.
+Within each authority there is exactly one hidden cell, which a reader recovers
+by subtracting from that authority's subtotal, so a second cell goes in each.
+
+`islh_suppression_audit()` reports what was hidden and why, so a reviewer can
+confirm the rule fired where it should have:
+
+```{r suppression-audit}
+islh_suppression_audit(hidden)
+```
+
+Keep the audit internal. It records no counts, but the reasons still say
+something about the hidden values: a cell marked `"small"` is known to be at or
+below the threshold. Publishing the audit, or a table that still carries it,
+narrows what a reader can infer. Save the audit with your working notes, then
+remove it from the object you release:
+
+```{r release-copy}
+audit <- islh_suppression_audit(hidden)
+released <- hidden
+attr(released, "islh_suppression") <- NULL
+names(attributes(released))
+```
+
+This helper works independently within each selected column. It does not prove
+that a multidimensional or linked release is protected. Use `linked` for
+rates, percentages and confidence limits calculated from a suppressed count.
+
+Keep suppression separate from missing data and from precision. Without a
+`label`, a suppressed cell and a missing value are both `NA`, so mark
+suppressed cells in the table notes using the audit. A wide confidence
+interval is a separate flag again: a count can be large enough to publish and
+still too imprecise to compare.
+
+## Round counts
+
+```{r deterministic-rounding}
+islh_round_base(c(0, 2, 3, 7, 12, 43), base = 5)
+```
+
+Deterministic rounding returns the same values each time. Random rounding is
+unbiased over repeated use but varies between runs. Set a seed, round once and
+save the released values:
+
+```{r random-rounding}
+set.seed(42)
+islh_round_base(c(2, 3, 7, 12), base = 5, method = "random")
+```
+
+## Compare with an existing report
+
+Before a new R output replaces a legacy report or a dashboard, check that the
+two agree. `islh_compare_outputs()` lines the tables up on their keys and
+returns one row for every value that differs, plus rows only one table has.
+No rows means full agreement.
+
+```{r compare-outputs}
+dashboard <- data.frame(
+  hsda = by_hsda$hsda,
+  cases = by_hsda$cases,
+  rate = round(crude$rate, 1)
+)
+# Pretend the dashboard counted one case differently.
+dashboard$cases[1] <- dashboard$cases[1] + 1
+
+r_output <- data.frame(
+  hsda = by_hsda$hsda,
+  cases = by_hsda$cases,
+  rate = crude$rate
+)
+
+islh_compare_outputs(r_output, dashboard, by = "hsda", tolerance = 0.05)
+```
+
+`tolerance` absorbs rounding in the reference table's rates. It applies to
+every numeric column, so keep it below 1 when counts are compared too, or
+compare counts and rates in separate calls.
+
+## Population and geography data
+
+The BC Data Catalogue helpers require a network request and are documented in
+[BC population and geography data](bcdata.html). That article shows the exact
+returned columns, representative output, a checked join and troubleshooting
+for unmatched rows.
+
+Use `islandbrand` after the calculation when the result needs an Island Health
+figure, table or Quarto report.

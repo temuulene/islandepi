@@ -1,0 +1,108 @@
+url: https://temuulene.github.io/islandepi/
+
+template:
+  bootstrap: 5
+  bslib:
+    base_font: "BC Sans"
+    heading_font: "BC Sans"
+
+navbar:
+  structure:
+    left: [intro, articles, reference, news]
+  components:
+    articles:
+      text: Guides
+      menu:
+        - text: Getting started
+          href: articles/islandepi.html
+        - text: Routine surveillance
+          href: articles/surveillance.html
+        - text: BC population and geography data
+          href: articles/bcdata.html
+
+articles:
+  - title: Surveillance
+    contents:
+      - surveillance
+  - title: Data access
+    contents:
+      - bcdata
+
+reference:
+  - title: Example data
+    desc: >
+      Simulated data for the examples and articles: an outbreak line list,
+      seven seasons of weekly counts, encounters with repeat visitors and a
+      feed log with a missing file.
+    contents:
+      - islh_outbreak
+      - islh_seasons
+      - islh_encounters
+      - islh_feed_log
+
+  - title: Routine surveillance
+    desc: >
+      Check event records and feed coverage, build complete period counts,
+      calculate transparent historical baselines and prepare current-window
+      reporting tables.
+    contents:
+      - islh_check_events
+      - islh_check_coverage
+      - islh_count_events
+      - islh_reporting_calendar
+      - islh_reference_periods
+      - islh_surveillance_baseline
+      - islh_surveillance_snapshot
+      - islh_compare_periods
+      - islh_reporting_delay
+      - islh_reporting_completeness
+
+  - title: Outbreak detection
+    desc: >
+      Model-based detection with the improved Farrington method. Needs the
+      surveillance package, and local evaluation of its alert burden before
+      use.
+    contents:
+      - islh_farrington
+
+  - title: BC population and geography
+    desc: >
+      Retrieve standardized denominators and boundaries from pinned BC Data
+      Catalogue sources, with consistent keys for checked joins.
+    contents:
+      - islh_bc_population
+      - islh_bc_geography
+      - islh_bc_sources
+
+  - title: Rates, proportions and confidence intervals
+    desc: >
+      Group ages, attach denominators with checked keys, and calculate crude
+      or directly standardized rates and proportions with explicit interval
+      methods and validated inputs.
+    contents:
+      - islh_age_group
+      - islh_join_denominator
+      - islh_crude_rate
+      - islh_proportion
+      - islh_dsr_joined
+      - islh_dsr
+      - islh_dsr_detail
+      - islh_standard_population
+      - islh_ci_poisson
+
+  - title: Disclosure control
+    desc: >
+      Apply suppression or rounding mechanics. Thresholds and rounding bases
+      must be supplied explicitly for the release being prepared.
+    contents:
+      - islh_suppress
+      - islh_suppress_table
+      - islh_suppression_audit
+      - islh_round_base
+
+  - title: Output checks
+    desc: >
+      Reconcile a new output with a legacy report, a dashboard extract or an
+      earlier run before switching over.
+    contents:
+      - islh_compare_outputs

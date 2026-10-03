@@ -1,0 +1,76 @@
+on:
+  push:
+    tags: ['v*']
+
+name: release
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {os: windows-latest, artifact: zip}
+          - {os: ubuntu-latest, artifact: tar.gz}
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches DESCRIPTION
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          described=$(grep '^Version:' DESCRIPTION | sed 's/Version: *//')
+          if [ "$tag" != "$described" ]; then
+            echo "Tag v$tag does not match DESCRIPTION version $described." >&2
+            exit 1
+          fi
+        shell: bash
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.artifact == 'zip' && '4.4.1' || 'release' }}
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - name: Require a clean package check
+        run: rcmdcheck::rcmdcheck(args = "--no-manual", error_on = "note")
+        shell: Rscript {0}
+
+      # Build the source package on both runners. R CMD build knits the
+      # articles into inst/doc; installing straight from the checkout would
+      # leave the Windows binary without them.
+      - name: Build source package
+        run: R CMD build .
+        shell: bash
+      - name: Build Windows binary
+        if: matrix.config.artifact == 'zip'
+        run: R CMD INSTALL --build islandepi_*.tar.gz
+        shell: bash
+      # Each runner uploads only its own kind of file, so the publish job never
+      # receives two copies of the source package.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.config.artifact }}
+          path: '*.${{ matrix.config.artifact }}'
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.tar.gz
+            *.zip
+          fail_on_unmatched_files: true
