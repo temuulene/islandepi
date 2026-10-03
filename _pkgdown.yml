@@ -15,12 +15,17 @@ navbar:
       menu:
         - text: Getting started
           href: articles/islandepi.html
+        - text: Why every estimate needs an interval
+          href: articles/intervals.html
         - text: Routine surveillance
           href: articles/surveillance.html
         - text: BC population and geography data
           href: articles/bcdata.html
 
 articles:
+  - title: Reporting
+    contents:
+      - intervals
   - title: Surveillance
     contents:
       - surveillance

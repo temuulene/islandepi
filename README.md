@@ -7,6 +7,10 @@ standardization, disclosure control and BC population and geography data. It
 does not choose case definitions, alert policy, suppression thresholds or the
 public-health response to a signal.
 
+Every rate and proportion comes with a confidence interval. See
+[Why every estimate needs an interval](https://temuulene.github.io/islandepi/articles/intervals.html)
+for worked examples of why PHASE products should report them.
+
 Documentation: <https://temuulene.github.io/islandepi/>
 
 New users should start with

@@ -24,6 +24,11 @@ so the printed values are actual package output.
 The package implements calculation mechanics. It does not choose the
 suppression threshold, standard population or interval method for a release.
 
+Every rate, proportion and standardized rate below comes with a confidence
+interval. Report the interval with the estimate. The article
+[Why every estimate needs an interval](intervals.html) shows, with worked
+examples, how leaving it out leads to wrong conclusions.
+
 ## Choose the function
 
 | Task | Function | Output |

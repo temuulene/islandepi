@@ -1,0 +1,513 @@
+---
+title: "Why every estimate needs an interval"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Why every estimate needs an interval}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 5,
+  fig.retina = 2
+)
+library(islandepi)
+has_plots <- requireNamespace("islandbrand", quietly = TRUE) &&
+  requireNamespace("ggplot2", quietly = TRUE)
+```
+
+```{r plot-setup, include=FALSE, eval=has_plots}
+islandbrand::islh_setup(format = "plots", quiet = TRUE)
+```
+
+A rate on its own looks exact. "89.5 per 100,000" reads as a precise fact, but
+it may rest on two cases or on two hundred. The confidence interval is the only
+part of the result that tells a reader which.
+
+This article works through five situations that come up in PHASE products. In
+each one, the point estimate alone points to a wrong conclusion and the
+interval corrects it. Every example is evaluated when the website is built,
+so the printed values are actual package output.
+
+## Every case is counted. Why an interval?
+
+Surveillance counts every reported case, so the count is not an estimate from a
+sample. But the questions a report answers are about risk. Is the risk higher
+in this area than that one? Is it higher this year than last?
+
+The cases that occur in a year are one outcome of the underlying risk. With
+exactly the same risk, next year would bring a different count, in the same way
+that a fair coin does not land heads exactly half the time. The interval
+describes how far a count of this size moves by chance alone, and so how far
+the observed rate can sit from the underlying rate. This is the standard
+approach for routine public health statistics (Eayres 2008).
+
+## 1. The same rate, very different certainty
+
+Island Health's 14 local health areas (LHAs) range from about 2,200 people to
+about 259,000. The populations below are BC Stats' 2025 estimates. The case
+counts in this article are illustrative.
+
+```{r lha}
+lha <- data.frame(
+  lha = c(
+    "Greater Victoria", "Greater Nanaimo", "Western Communities",
+    "Comox Valley", "Saanich Peninsula", "Cowichan Valley South",
+    "Oceanside", "Greater Campbell River", "Alberni/Clayoquot",
+    "Cowichan Valley North", "Southern Gulf Islands",
+    "Vancouver Island North", "Cowichan Valley West", "Vancouver Island West"
+  ),
+  population = c(
+    258999, 133395, 113681, 80091, 72271, 66122, 54815, 49412, 36288, 22370,
+    19130, 11568, 7329, 2234
+  )
+)
+```
+
+Suppose the smallest and the largest LHA report the same rate:
+
+```{r same-rate}
+two <- lha[lha$lha %in% c("Vancouver Island West", "Greater Victoria"), ]
+two$cases <- c(233, 2)
+rownames(two) <- NULL
+
+same <- islh_crude_rate(two$cases, two$population)
+cbind(two["lha"], round(same[c("cases", "rate", "lower", "upper")], 1))
+```
+
+Both rates are about 90 per 100,000. In Greater Victoria the interval runs from
+`r round(same$lower[1])` to `r round(same$upper[1])`, so the rate is pinned down
+to within about 12%. In Vancouver Island West it runs from
+`r round(same$lower[2])` to `r round(same$upper[2])`. One more case there would
+add `r round(1 / two$population[2] * 1e5)` per 100,000 to the rate. Without the
+interval, a reader cannot tell these two numbers apart.
+
+The width of an interval depends almost entirely on the number of events, not
+on the size of the population:
+
+```{r width-by-count}
+events <- c(1, 2, 5, 10, 20, 50, 100, 500)
+limits <- islh_ci_poisson(events, method = "exact")
+data.frame(
+  events = events,
+  lower = round(limits$lower, 1),
+  upper = round(limits$upper, 1),
+  below_estimate = sprintf("%.0f%%", 100 * (limits$lower / events - 1)),
+  above_estimate = sprintf("+%.0f%%", 100 * (limits$upper / events - 1))
+)
+```
+
+With 10 events, the true value could plausibly be half the estimate or nearly
+double it. Even at 20 events the interval runs from about 40% below to over
+50% above. Rates for small areas, short periods and rare conditions are where
+intervals matter most, and those are exactly the rates that tend to make
+headlines.
+
+## 2. Ranking areas: the league table trap
+
+A table or map that sorts areas by rate invites the reader to ask what is going
+wrong at the top and right at the bottom. Small areas almost always fill both
+ends, whatever the true rates are.
+
+To show this, give every LHA exactly the same underlying rate, 50 per 100,000
+per year, and simulate one year of cases:
+
+```{r league-table}
+set.seed(61)
+true_rate <- 50
+lha$cases <- stats::rpois(nrow(lha), lha$population * true_rate / 1e5)
+
+league <- cbind(
+  lha["lha"],
+  islh_crude_rate(lha$cases, lha$population)[
+    c("cases", "population", "rate", "lower", "upper")
+  ]
+)
+league <- league[order(-league$rate), ]
+rownames(league) <- NULL
+league$rate <- round(league$rate, 1)
+league$lower <- round(league$lower, 1)
+league$upper <- round(league$upper, 1)
+league
+```
+
+```{r league-facts, include=FALSE}
+top <- league[1, ]
+bottom <- league[nrow(league), ]
+covered <- sum(league$lower <= true_rate & league$upper >= true_rate)
+```
+
+Sorted by rate, `r top$lha` comes first at `r top$rate` per 100,000, from
+`r top$cases` cases. `r bottom$lha` comes last at `r bottom$rate`, from
+`r bottom$cases` case. That is a `r round(top$rate / bottom$rate)`-fold gap
+between two areas with identical risk, produced by chance alone.
+
+The intervals tell the real story. `r if (covered == nrow(league)) "All 14" else paste(covered, "of the 14")`
+intervals contain the true rate of 50. The two areas at the extremes are among
+the smallest, and their intervals are among the widest.
+
+```{r league-plot, eval=has_plots, fig.height=5.5, fig.alt="Dot-and-whisker chart of crude rates per 100,000 for Island Health's 14 local health areas, sorted from highest to lowest, with a dashed vertical line at the true rate of 50. Vancouver Island West has the highest rate, about 134, with an interval from about 28 to 393. Cowichan Valley West has the lowest, about 14, with an interval from about 0.3 to 76. Every interval crosses the dashed line, and the intervals for the largest areas are the narrowest."}
+ranked <- league
+ranked$lha <- factor(ranked$lha, levels = rev(ranked$lha))
+
+ggplot2::ggplot(ranked, ggplot2::aes(x = rate, y = lha)) +
+  ggplot2::geom_vline(
+    xintercept = true_rate,
+    linetype = "dashed",
+    colour = islandbrand::islh_hex("grey", 50)
+  ) +
+  ggplot2::geom_pointrange(
+    ggplot2::aes(xmin = lower, xmax = upper),
+    colour = islandbrand::islh_brand("primary")
+  ) +
+  ggplot2::annotate(
+    "text",
+    x = true_rate,
+    y = nrow(ranked) + 0.9,
+    label = "True rate in every area",
+    hjust = -0.05,
+    size = 3.5
+  ) +
+  ggplot2::scale_y_discrete(expand = ggplot2::expansion(add = c(0.6, 1.4))) +
+  ggplot2::labs(
+    x = "Cases per 100,000 (95% confidence interval)",
+    y = NULL,
+    title = "Same underlying risk, a tenfold range of observed rates",
+    caption = "Simulated cases; populations from BC Stats 2025 estimates."
+  )
+```
+
+### Use a funnel plot instead of a ranking
+
+A funnel plot shows each area's rate against its population. The funnel marks
+where rates would fall by chance alone if every area had the overall rate. It
+narrows as the population grows, because larger areas vary less.
+
+An area outside the funnel deserves a closer look. An area inside it does not
+stand out from the rest, however high it sits in a ranked list. Draw two
+funnels: the 95% limits, which about 1 area in 20 crosses by chance, and the
+99.8% limits, which about 1 in 500 crosses (Spiegelhalter 2005).
+
+Poisson counts are whole numbers, so funnel limits read straight from
+`stats::qpois()` jump in steps. Spiegelhalter (2005) interpolates between the
+steps to give smooth limits:
+
+```{r funnel-data}
+funnel_limit <- function(p, expected) {
+  r <- stats::qpois(p, expected)
+  step <- (stats::ppois(r, expected) - p) / stats::dpois(r, expected)
+  pmax(r - step, 0)
+}
+
+overall <- sum(lha$cases) / sum(lha$population) * 1e5
+
+funnel <- data.frame(
+  population = exp(seq(log(1500), log(300000), length.out = 300))
+)
+expected <- funnel$population * overall / 1e5
+for (p in c(0.001, 0.025, 0.975, 0.999)) {
+  funnel[[paste0("p", p)]] <- funnel_limit(p, expected) / funnel$population * 1e5
+}
+
+inside <- league$rate >= stats::approx(
+  funnel$population, funnel$p0.025, league$population
+)$y &
+  league$rate <= stats::approx(
+    funnel$population, funnel$p0.975, league$population
+  )$y
+sum(inside)
+```
+
+```{r funnel-plot, eval=has_plots, fig.alt="Funnel plot of crude rate per 100,000 against population on a log scale for the 14 local health areas. A solid horizontal line marks the overall rate of about 50. Dashed 95% and dotted 99.8% limits form a smooth funnel that is wide for small populations and narrows as population grows. All 14 areas fall inside the 95% funnel, including the two labelled extremes, Vancouver Island West at about 134 and Cowichan Valley West at about 14."}
+limit_colour <- islandbrand::islh_hex("grey", 45)
+extremes <- league[c(1, nrow(league)), ]
+
+ggplot2::ggplot(funnel, ggplot2::aes(x = population)) +
+  ggplot2::geom_line(
+    ggplot2::aes(y = p0.001),
+    linetype = "dotted",
+    colour = limit_colour
+  ) +
+  ggplot2::geom_line(
+    ggplot2::aes(y = p0.999),
+    linetype = "dotted",
+    colour = limit_colour
+  ) +
+  ggplot2::geom_line(
+    ggplot2::aes(y = p0.025),
+    linetype = "dashed",
+    colour = limit_colour
+  ) +
+  ggplot2::geom_line(
+    ggplot2::aes(y = p0.975),
+    linetype = "dashed",
+    colour = limit_colour
+  ) +
+  ggplot2::geom_hline(yintercept = overall, colour = limit_colour) +
+  ggplot2::geom_point(
+    data = league,
+    ggplot2::aes(y = rate),
+    colour = islandbrand::islh_brand("primary"),
+    size = 2.5
+  ) +
+  ggplot2::geom_text(
+    data = extremes,
+    ggplot2::aes(y = rate, label = lha),
+    hjust = -0.12,
+    size = 3.5
+  ) +
+  ggplot2::scale_x_log10(
+    labels = function(x) format(x, big.mark = ",", scientific = FALSE)
+  ) +
+  ggplot2::labs(
+    x = "Population (log scale)",
+    y = "Cases per 100,000",
+    title = "Every area sits inside the funnel",
+    caption = "Dashed: 95% limits. Dotted: 99.8% limits. Simulated cases."
+  )
+```
+
+## 3. "Up 57% on last year"
+
+Suppose the Comox Valley had 14 cases last year and 22 this year, with no
+change in population. A headline might read "Cases up 57%".
+
+Compare two rates with a rate ratio and the interval for that ratio. Base R's
+`stats::poisson.test()` gives the exact interval for the ratio of two Poisson
+rates, conditional on their total (Breslow and Day 1987). Put the later period,
+or the group of interest, first:
+
+```{r small-change}
+comox <- data.frame(year = c(2024, 2025), cases = c(14, 22), population = 80091)
+cbind(
+  comox["year"],
+  round(islh_crude_rate(comox$cases, comox$population)[
+    c("cases", "rate", "lower", "upper")
+  ], 1)
+)
+
+change <- stats::poisson.test(
+  x = rev(comox$cases),
+  T = rev(comox$population)
+)
+round(c(
+  ratio = unname(change$estimate),
+  lower = change$conf.int[1],
+  upper = change$conf.int[2]
+), 2)
+```
+
+The ratio is `r round(change$estimate, 2)`, but its interval runs from
+`r round(change$conf.int[1], 2)` to `r round(change$conf.int[2], 2)`. The data
+are consistent with anything from a fall of about a quarter to more than a
+tripling. Counts of 14 and 22 sit well within the range chance produces from
+one year to the next.
+
+That does not mean nothing changed. It means these data cannot tell. Report the
+counts, the ratio and its interval, and avoid "rise" or "increase" as a
+finding.
+
+### Overlapping intervals can still hide a real change
+
+The opposite mistake is just as common. Suppose Greater Nanaimo went from 160
+cases to 205:
+
+```{r overlap}
+nanaimo <- data.frame(
+  year = c(2024, 2025),
+  cases = c(160, 205),
+  population = 133395
+)
+nanaimo_rates <- islh_crude_rate(nanaimo$cases, nanaimo$population)
+cbind(
+  nanaimo["year"],
+  round(nanaimo_rates[c("cases", "rate", "lower", "upper")], 1)
+)
+
+change <- stats::poisson.test(
+  x = rev(nanaimo$cases),
+  T = rev(nanaimo$population)
+)
+round(c(
+  ratio = unname(change$estimate),
+  lower = change$conf.int[1],
+  upper = change$conf.int[2]
+), 2)
+```
+
+The two intervals overlap: 2024's runs up to `r round(nanaimo_rates$upper[1])`
+and 2025's starts at `r round(nanaimo_rates$lower[2])`. It is tempting to read
+that overlap as "no real change", and it would be wrong. The interval for the
+ratio, `r round(change$conf.int[1], 2)` to `r round(change$conf.int[2], 2)`,
+excludes 1.
+
+Two 95% intervals can overlap even when the difference between the estimates is
+clear (Schenker and Gentleman 2001). Compare two estimates with the interval
+for their ratio or difference, not by checking whether their intervals touch.
+The reverse does hold: when two 95% intervals do not overlap at all, the
+difference is clear at an even stricter level than 5%.
+
+## 4. Percentages and targets
+
+Proportions behave the same way. `islh_proportion()` uses the Wilson score
+interval (Wilson 1927), which stays between 0 and 100% and behaves well for
+small denominators. Suppose the target is to reach 90% of new cases within 24
+hours:
+
+```{r proportions}
+follow_up <- data.frame(
+  team = c("Small team", "Large team", "Small team, next quarter"),
+  reached = c(18, 1710, 19),
+  cases = c(20, 1900, 20)
+)
+share <- islh_proportion(follow_up$reached, follow_up$cases, per = 100)
+cbind(
+  follow_up["team"],
+  round(share[c("x", "n", "proportion", "lower", "upper")], 1)
+)
+```
+
+Both teams reached 90%. The large team's interval is under 3 points wide, so
+its performance is known closely. The small team's runs from
+`r round(share$lower[1])` to `r round(share$upper[1])`.
+
+The next quarter, the small team reaches 19 of 20, or 95%. A report might say
+the team now "exceeds the target". The interval, `r round(share$lower[3])` to
+`r round(share$upper[3])`, says the data are consistent with performance well
+below 90%. One more or one fewer case reached moves the result by 5 points.
+Before saying a result meets or misses a target, check where the interval
+sits, not just the estimate.
+
+## 5. Putting intervals in products
+
+### Tables
+
+Give each estimate its interval in the same cell or the next column. Write the
+range with "to" rather than a hyphen, which is easy to misread as a minus sign:
+
+```{r format-table}
+format_interval <- function(estimate, lower, upper, digits = 1) {
+  fmt <- function(x) formatC(x, format = "f", digits = digits, big.mark = ",")
+  sprintf("%s (%s to %s)", fmt(estimate), fmt(lower), fmt(upper))
+}
+
+published <- data.frame(
+  lha = league$lha,
+  cases = league$cases,
+  rate = format_interval(league$rate, league$lower, league$upper)
+)
+names(published)[3] <- "Rate per 100,000 (95% CI)"
+published <- published[order(published$lha), ]
+rownames(published) <- NULL
+head(published, 5)
+```
+
+Sort tables of areas alphabetically or geographically, not by rate. Put the
+interval method and confidence level in the table notes. `islh_crude_rate()`,
+`islh_proportion()` and `islh_dsr()` return them in the `method` and `conf`
+columns.
+
+For branded HTML and Word tables, pass the formatted data frame to
+`islandbrand::islh_gt()` or `islandbrand::islh_flextable()`.
+
+### Figures
+
+Show intervals as error bars or dot-and-whisker charts for areas and groups,
+and as a shaded band for a trend over time. The islandbrand article
+[Surveillance figures](https://temuulene.github.io/islandbrand/articles/surveillance.html#showing-uncertainty)
+shows both in the Island Health style.
+
+Avoid bar charts of small-area rates without intervals. A bar's length implies
+a precision the data do not have.
+
+### Text
+
+State the estimate with its interval at first mention:
+
+> The rate in Greater Victoria was 90.0 cases per 100,000 (95% CI 78.8 to
+> 102.3).
+
+For a comparison, report the ratio or difference, its interval and the counts
+behind it:
+
+> Comox Valley reported 22 cases in 2025 and 14 in 2024. The rate ratio was
+> 1.57 (95% CI 0.77 to 3.32), so these data cannot show whether the rate rose
+> or fell.
+
+For audiences outside epidemiology, one sentence is enough:
+
+> The range in brackets shows how much the rate could vary by chance, given
+> the number of cases it is based on. A wide range means the rate is uncertain.
+
+Avoid saying there is a 95% probability that the true rate lies in the
+interval. That is not what a confidence interval means, and the plain-language
+sentence above does not need it.
+
+### Standardized rates
+
+Standardized rates need intervals as much as crude rates, and theirs are often
+wider, because a few sparse age bands with large weights can dominate. Use
+`islh_dsr()` or `islh_dsr_joined()` with the default Fay-Feuer interval, and
+`islh_dsr_detail()` to see which age bands make the interval wide. The
+[Getting started](islandepi.html#directly-standardized-rates) article has a
+worked example.
+
+## What an interval does not cover
+
+A confidence interval describes chance variation in the count. It does not
+cover:
+
+- under-reporting, or changes in testing, case definitions or coding;
+- cases not yet reported for recent periods, which
+  `islh_reporting_completeness()` estimates;
+- errors in the population denominator;
+- the extra chance findings that come from making many comparisons at once.
+  With 14 areas and 95% intervals, expect about one area in 20 to look
+  unusual by chance in any given year.
+
+When these matter, say so beside the interval rather than leaving the reader
+to assume the interval covers them.
+
+## Checklist for PHASE products
+
+- Give every rate, proportion and standardized rate its 95% interval, in
+  tables, figures and text.
+- Compare two estimates with the interval for their ratio or difference, not by
+  eye and not by whether their intervals overlap.
+- Do not rank small areas by their point estimates. Use a funnel plot, or sort
+  by name or geography and show the intervals.
+- Before saying a result meets, exceeds or misses a target, check where the
+  interval sits.
+- Name the interval method and confidence level in the notes.
+- When an interval is too wide to support any conclusion, say so. Consider
+  combining years or areas, applied the same way to every estimate being
+  compared.
+- Keep precision separate from suppression. A count can be large enough to
+  publish and still too imprecise to compare.
+
+## References
+
+Breslow NE, Day NE (1987). *Statistical Methods in Cancer Research, Volume
+II: The Design and Analysis of Cohort Studies*. IARC Scientific Publications
+No. 82. Lyon: International Agency for Research on Cancer.
+
+Eayres D (2008). *Technical Briefing 3: Commonly used public health statistics
+and their confidence intervals*. York: Association of Public Health
+Observatories.
+
+Schenker N, Gentleman JF (2001). On judging the significance of differences by
+examining the overlap between confidence intervals. *The American
+Statistician* 55(3):182-186.
+
+Spiegelhalter DJ (2005). Funnel plots for comparing institutional
+performance. *Statistics in Medicine* 24(8):1185-1202.
+
+Wilson EB (1927). Probable inference, the law of succession, and statistical
+inference. *Journal of the American Statistical Association*
+22(158):209-212.

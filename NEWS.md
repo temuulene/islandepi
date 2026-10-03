@@ -13,4 +13,7 @@ First public release. It includes:
 * Disclosure control: suppression, a suppression audit and rounding, with
   thresholds and bases supplied by the caller.
 * Output checks against a legacy report, a dashboard extract or an earlier run.
+* The article "Why every estimate needs an interval", with worked examples of
+  how confidence intervals change the reading of small-area rates, rankings,
+  year-on-year changes and performance against a target.
 * Simulated example data for the examples and articles.
