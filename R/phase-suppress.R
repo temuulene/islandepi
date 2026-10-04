@@ -67,10 +67,25 @@
 #' should have, without re-running the analysis.
 #'
 #' Keep the audit internal. Even without counts, the reasons can constrain
-#' hidden values. Remove its attribute from released objects. This is a
-#' one-dimensional rule, not protection across row totals, nested totals,
-#' related rates or repeated releases. Do not include total rows among the
-#' component rows. Stops if a positive complementary cell cannot be selected.
+#' hidden values. This is a one-dimensional rule, not protection across row
+#' totals, nested totals, related rates or repeated releases. Do not include
+#' total rows among the component rows. Stops if a positive complementary cell
+#' cannot be selected.
+#'
+#' @section Calculation detail and sharing:
+#'
+#' Some results carry the calculation behind them. A rate from [islh_dsr()]
+#' keeps every stratum's cases and population, which [islh_dsr_detail()]
+#' reads. Those stratum counts are a finer table than the one being
+#' suppressed, so this function removes that detail from its result, whether
+#' or not a cell was hidden. Read the detail before suppressing if you need
+#' it.
+#'
+#' The result still carries the audit, and it is still an internal working
+#' object. A printed table or a CSV of chosen columns shows only those
+#' columns, but an R object saved with `saveRDS()` keeps every attribute. To
+#' share a table, make a copy with [islh_release_copy()], which keeps only the
+#' columns you name and none of the package's working information.
 #'
 #' @param data A data frame.
 #' @param cols Columns to suppress, as character names or whole numeric
@@ -283,6 +298,24 @@ islh_suppress_table <- function(
   }
 
   attr(data, "islh_suppression") <- .islh_bind_audit(audit)
+  .islh_drop_detail(data)
+}
+
+# Calculation detail the package attaches to a result, such as the stratum
+# counts behind a standardized rate. It is a finer table than the one being
+# suppressed, so the suppression rule never examined it: a total of 50 can
+# rest on a stratum of 1. Suppression removes it whether or not a cell was
+# hidden, and leaves a marker so islh_dsr_detail() can say why it is gone.
+.islh_detail_attributes <- c("islh_dsr_strata", "islh_strata")
+
+.islh_drop_detail <- function(data) {
+  present <- intersect(.islh_detail_attributes, names(attributes(data)))
+  if (length(present) > 0L) {
+    for (name in present) {
+      attr(data, name) <- NULL
+    }
+    attr(data, "islh_detail_removed") <- TRUE
+  }
   data
 }
 

@@ -129,10 +129,27 @@ is what lets a reviewer confirm that the complementary rule fired where it
 should have, without re-running the analysis.
 
 Keep the audit internal. Even without counts, the reasons can constrain
-hidden values. Remove its attribute from released objects. This is a
-one-dimensional rule, not protection across row totals, nested totals,
-related rates or repeated releases. Do not include total rows among the
-component rows. Stops if a positive complementary cell cannot be selected.
+hidden values. This is a one-dimensional rule, not protection across row
+totals, nested totals, related rates or repeated releases. Do not include
+total rows among the component rows. Stops if a positive complementary cell
+cannot be selected.
+}
+
+\section{Calculation detail and sharing}{
+
+
+Some results carry the calculation behind them. A rate from \code{\link[=islh_dsr]{islh_dsr()}}
+keeps every stratum's cases and population, which \code{\link[=islh_dsr_detail]{islh_dsr_detail()}}
+reads. Those stratum counts are a finer table than the one being
+suppressed, so this function removes that detail from its result, whether
+or not a cell was hidden. Read the detail before suppressing if you need
+it.
+
+The result still carries the audit, and it is still an internal working
+object. A printed table or a CSV of chosen columns shows only those
+columns, but an R object saved with \code{saveRDS()} keeps every attribute. To
+share a table, make a copy with \code{\link[=islh_release_copy]{islh_release_copy()}}, which keeps only the
+columns you name and none of the package's working information.
 }
 
 \examples{

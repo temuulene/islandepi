@@ -6,11 +6,13 @@
 #' years, allowing for trend, seasonality and overdispersion, and flags a week
 #' whose count is above the model's upper limit.
 #'
-#' Unlike [islh_surveillance_baseline()], this is a detection method with a
-#' stated false-alarm rate under its model. It still needs local evaluation:
-#' before relying on it, run it over past seasons, count how many alarms it
-#' raises and how many real events it would have caught, and set `alpha` so
-#' the alert burden is workable. An alarm is a signal to review, not a finding.
+#' Unlike [islh_surveillance_baseline()], this is a model-based detection
+#' method: `alpha` is a nominal false-alarm level under the model's
+#' assumptions, not a guaranteed rate in practice. It still needs local
+#' evaluation: before relying on it, run it over past seasons, count how many
+#' alarms it raises and how many real events it would have caught, and set
+#' `alpha` so the alert burden is workable. An alarm is a signal to review,
+#' not a finding.
 #'
 #' @section Settings:
 #'
@@ -22,8 +24,25 @@
 #' threshold (`"nbPlugin"`). `years_back` and `window` set which earlier weeks
 #' the model sees.
 #'
-#' Weeks with fewer than 5 cases in the last 4 weeks never raise an alarm,
-#' which protects against alarms on very small counts.
+#' @section Weeks that are not assessed:
+#'
+#' `status` says what happened to each week:
+#'
+#' * `"assessed"`: the model gave an upper limit, and `alarm` is `TRUE` or
+#'   `FALSE`.
+#' * `"low_count_rule"`: fewer than `low_count` cases in the last
+#'   `low_count_weeks` weeks, counting the week assessed. The method does not
+#'   assess such weeks, to avoid alarms on very small counts, so `alarm`,
+#'   `expected` and `upper_limit` are `NA`.
+#' * `"fit_failed"`: the model could not be fitted, and `alarm` is `NA`.
+#'
+#' A week that was not assessed is not a week without a signal. Show the
+#' status in any table of results, so a reader can tell a quiet week from one
+#' the method set aside. For rare conditions the low-count rule sets aside
+#' most weeks; whether that is acceptable is an alerting-policy decision, and
+#' `low_count` and `low_count_weeks` make it explicit.
+#'
+#' The result records the settings used in its `islh_farrington` attribute.
 #'
 #' @param data A complete weekly count table with one row per group and week,
 #'   normally from [islh_count_events()]. Every group must have every week,
@@ -43,12 +62,18 @@
 #'   current outbreak does not raise its own limit.
 #' @param threshold_method `"nbPlugin"`, `"muan"` or `"delta"`. See
 #'   `surveillance::farringtonFlexible()`.
+#' @param low_count,low_count_weeks A week is assessed only when the last
+#'   `low_count_weeks` weeks, counting the week assessed, hold at least
+#'   `low_count` cases. The defaults, 5 cases in 4 weeks, are the method's
+#'   own. `low_count = 0` assesses every week.
 #' @param timezone Reporting timezone for timestamps. Date values are
 #'   unchanged.
 #'
-#' @return One row per group and assessed week: the grouping columns,
-#'   `period_start`, `observed`, `expected`, `upper_limit`, `alarm` and
-#'   `pvalue`. `alarm` is `NA` when the model could not be fitted.
+#' @return One row per group and week in `from` to `to`: the grouping
+#'   columns, `period_start`, `observed`, `expected`, `upper_limit`, `alarm`,
+#'   `pvalue` and `status`. `alarm` is `NA` for any week not assessed; see the
+#'   section on weeks that are not assessed. `pvalue` is the model's, and is
+#'   reported even when the low-count rule sets a week aside.
 #' @export
 #'
 #' @references
@@ -86,6 +111,8 @@ islh_farrington <- function(
   no_periods = 10,
   past_weeks_excluded = 26,
   threshold_method = c("nbPlugin", "muan", "delta"),
+  low_count = 5,
+  low_count_weeks = 4,
   timezone = "America/Vancouver"
 ) {
   threshold_method <- match.arg(threshold_method)
@@ -96,9 +123,20 @@ islh_farrington <- function(
   if (missing(from)) {
     .islh_abort("Supply {.arg from}, the first week to assess.")
   }
-  for (arg in c("years_back", "window", "no_periods", "past_weeks_excluded")) {
+  for (arg in c(
+    "years_back",
+    "window",
+    "no_periods",
+    "past_weeks_excluded",
+    "low_count",
+    "low_count_weeks"
+  )) {
     x <- get(arg)
-    minimum <- if (arg %in% c("years_back", "no_periods")) 1 else 0
+    minimum <- if (arg %in% c("years_back", "no_periods", "low_count_weeks")) {
+      1
+    } else {
+      0
+    }
     if (
       !is.numeric(x) ||
         length(x) != 1L ||
@@ -127,7 +165,15 @@ islh_farrington <- function(
   by_names <- .islh_surv_select(data, rlang::enquo(by), "by")
   .islh_surv_check_reserved(
     by_names,
-    c("period_start", "observed", "expected", "upper_limit", "alarm", "pvalue")
+    c(
+      "period_start",
+      "observed",
+      "expected",
+      "upper_limit",
+      "alarm",
+      "pvalue",
+      "status"
+    )
   )
 
   work <- as.data.frame(data)
@@ -141,13 +187,21 @@ islh_farrington <- function(
     value_name,
     allow_na = FALSE
   )
-  interval <- .islh_surv_resolve_interval(NULL, meta, work$.islh_date)
-  if (is.null(interval) || !interval %in% c("week", "isoweek", "epiweek")) {
+  # The method only takes weekly counts. A table without metadata is read as
+  # one row per week, and the spacing check below confirms the dates are
+  # seven days apart.
+  interval <- if (is.null(meta)) "week" else meta$interval
+  if (
+    (meta$periods %||% 1L) != 1L ||
+      !interval %in% c("week", "isoweek", "epiweek")
+  ) {
     .islh_abort(c(
       "{.arg data} must hold weekly counts.",
       i = "The Farrington method here is set up for 52-week years."
     ))
   }
+  # A partial week distorts the model's history as much as the week assessed.
+  .islh_surv_check_partial(work)
   if (anyDuplicated(work[c(by_names, ".islh_date")])) {
     .islh_abort(c(
       "{.arg data} has more than one row per group and week.",
@@ -190,14 +244,9 @@ islh_farrington <- function(
   } else {
     data.frame(.islh_all = 1L)
   }
-  key <- function(x) {
-    if (length(by_names) == 0L) {
-      return(rep("", nrow(x)))
-    }
-    do.call(paste, c(unname(lapply(x[by_names], as.character)), sep = "\r"))
-  }
-  work_key <- key(work)
-  group_key <- key(groups)
+  ids <- .islh_key_ids(list(work, groups), by_names)
+  work_key <- ids[[1]]
+  group_key <- ids[[2]]
   observed <- vapply(
     group_key,
     function(g) {
@@ -224,10 +273,18 @@ islh_farrington <- function(
     start = c(lubridate::isoyear(weeks[1]), lubridate::isoweek(weeks[1]))
   )
   range <- which(weeks >= from & weeks <= to)
+  if (min(range) < low_count_weeks) {
+    .islh_abort(c(
+      "{.arg data} does not go back far enough for the low-count rule.",
+      i = "The first week assessed needs {low_count_weeks} week{?s} of
+           counts up to and including it."
+    ))
+  }
   fit <- surveillance::farringtonFlexible(
     counts,
     control = list(
       range = range,
+      limit54 = c(as.integer(low_count), as.integer(low_count_weeks)),
       b = as.integer(years_back),
       w = as.integer(window),
       reweight = TRUE,
@@ -254,7 +311,27 @@ islh_farrington <- function(
     alarm = as.vector(alarm),
     pvalue = as.vector(fit@control$pvalue)
   )
-  out$alarm[is.na(out$upper_limit)] <- NA
+  # Recompute the method's low-count rule, so a week it set aside is told
+  # apart from one where the model failed.
+  enough <- as.vector(vapply(
+    seq_along(group_key),
+    function(g) {
+      vapply(
+        range,
+        function(k) {
+          sum(observed[(k - low_count_weeks + 1L):k, g]) >= low_count
+        },
+        logical(1)
+      )
+    },
+    logical(n_weeks)
+  ))
+  out$status <- ifelse(
+    !is.na(out$upper_limit),
+    "assessed",
+    ifelse(enough, "fit_failed", "low_count_rule")
+  )
+  out$alarm[out$status != "assessed"] <- NA
   if (length(by_names) > 0L) {
     labels <- groups[out$.islh_group, by_names, drop = FALSE]
     rownames(labels) <- NULL
@@ -262,5 +339,18 @@ islh_farrington <- function(
   }
   out$.islh_group <- NULL
   rownames(out) <- NULL
+  attr(out, "islh_farrington") <- list(
+    years_back = as.integer(years_back),
+    window = as.integer(window),
+    alpha = alpha,
+    no_periods = as.integer(no_periods),
+    past_weeks_excluded = as.integer(past_weeks_excluded),
+    threshold_method = threshold_method,
+    low_count = as.integer(low_count),
+    low_count_weeks = as.integer(low_count_weeks),
+    reweight_threshold = 2.58,
+    trend = TRUE,
+    surveillance_version = as.character(utils::packageVersion("surveillance"))
+  )
   out
 }

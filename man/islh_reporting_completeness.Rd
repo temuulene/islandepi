@@ -10,8 +10,10 @@ islh_reporting_completeness(
   report,
   as_of,
   max_delay,
+  maturity,
   by = NULL,
   pool = FALSE,
+  learn_days = NULL,
   timezone = "America/Vancouver"
 )
 }
@@ -24,14 +26,20 @@ islh_reporting_completeness(
 
 \item{as_of}{Reporting cutoff: the date the data stood at. Required.}
 
-\item{max_delay}{Longest delay, in days, to learn. Required. Events from
-the last \code{max_delay} days are the ones assessed; older events supply the
-delays.}
+\item{max_delay}{Number of recent days to assess: event dates from
+\code{as_of - max_delay + 1} to \code{as_of}. Required.}
+
+\item{maturity}{Days after an event by which you judge all its records to
+have arrived. Delays are learned only from events at least this old. Must
+be at least \code{max_delay}. Required: see the section on assumptions.}
 
 \item{by}{Optional tidy-select specification of grouping columns.}
 
 \item{pool}{Learn one delay pattern from all groups rather than one per
 group.}
+
+\item{learn_days}{Optional number of event days to learn from, counting
+back from \code{as_of - maturity}. \code{NULL} learns from every mature event.}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
 unchanged.}
@@ -40,41 +48,66 @@ unchanged.}
 One row per group and event date in the last \code{max_delay} days up to
 \code{as_of}: the grouping columns, \code{onset_date}, \code{days_since_onset},
 \code{reported} (records for that date reported by \code{as_of}),
-\code{expected_complete} and \code{delay_records}.
+\code{expected_complete}, \code{delay_records} (records in the learning window), and
+\code{learn_from} and \code{learn_to} (the event dates delays were learned from).
 }
 \description{
-\code{islh_reporting_completeness()} estimates, for each recent event date, what
-share of its eventual records had been reported by \code{as_of}. It uses the
-delays seen in older events, where every delay up to \code{max_delay} days has
-had time to appear.
+\code{islh_reporting_completeness()} labels recent event dates with how complete
+their counts are likely to be. It learns an empirical delay profile, the
+share of records that arrive within each number of days, from older events
+that you judge to be fully reported, and applies it to the event dates in
+the last \code{max_delay} days before \code{as_of}.
 }
 \details{
-Read \code{expected_complete} as: of all the records that will eventually be
-reported for that date, about this share had arrived. A value of 0.4 means
-the count is likely to more than double. It is a guide for labelling recent
-periods as incomplete, not a forecast.
+Read \code{expected_complete} as: if recent events report like the older ones,
+about this share of their eventual records had arrived by \code{as_of}. A value
+of 0.4 means the count is likely to more than double. Use it to label recent
+periods as incomplete, not as a forecast of the final count.
 }
-\section{Assumptions}{
+\section{What the estimate rests on}{
 
 
-The estimate assumes recent reporting delays look like those of the older
-events it learned from. A holiday, a new data feed or a surge that slows
-reporting breaks that. Delays longer than \code{max_delay} count as not yet
-reported, so \code{expected_complete} never reaches 1 when such delays occur.
+Two assumptions, and the result is only as good as either.
+
+\strong{Maturity.} An event at least \code{maturity} days before \code{as_of} has all its
+records in. Delays are learned only from those events. The data cannot
+check this: a record that has not arrived leaves no trace. If some records
+take longer than \code{maturity} days, the profile misses them and
+\code{expected_complete} is too high. Choose \code{maturity} from what you know of the
+reporting system, not from this data. When older events in the data do show
+delays longer than \code{maturity}, a warning says so, because the assumption is
+then visibly wrong.
+
+\strong{Stability.} Recent events report like the older ones learned from. A
+holiday, a new data feed or a surge that slows reporting breaks this.
+\code{learn_days} limits learning to the most recent mature events, which
+follows a changing system more closely but uses fewer records.
 
 With \code{by}, each group learns from its own delays, which is unstable for
 small groups. \code{delay_records} gives the number of records each estimate
-rests on; set \code{pool = TRUE} to learn one delay pattern from all groups.
+rests on; set \code{pool = TRUE} to learn one profile from all groups.
+
+This is not a nowcast. It does not model trends in the delays or in the
+epidemic curve, and it gives no interval. When the final count itself
+matters, use a nowcasting method that adjusts for right truncation
+(Charniga et al. 2024).
 }
 
 \examples{
-# How complete were the counts by onset date on 20 January?
+# How complete were the counts by onset date on 20 January? Records are
+# judged complete 21 days after onset.
 completeness <- islh_reporting_completeness(
   islh_outbreak,
   onset = date_onset,
   report = date_reported,
   as_of = "2026-01-20",
-  max_delay = 10
+  max_delay = 10,
+  maturity = 21
 )
 tail(completeness)
+}
+\references{
+Charniga K, Park SW, Akhmetzhanov AR, et al. (2024). Best practices for
+estimating and reporting epidemiological delay distributions of
+infectious diseases. arXiv:2405.08841.
 }

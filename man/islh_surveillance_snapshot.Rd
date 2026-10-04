@@ -20,7 +20,9 @@ islh_surveillance_snapshot(
   timezone = "America/Vancouver",
   missing_periods = c("error", "missing", "zero"),
   comparison = c("above", "at_or_above"),
-  zero_reference = c("positive_only", "compare")
+  zero_reference = c("positive_only", "compare"),
+  source_interval = NULL,
+  coverage = NULL
 )
 }
 \arguments{
@@ -35,7 +37,10 @@ islh_surveillance_snapshot(
 must not share a name with a column the result creates, such as \code{total},
 \code{complete} or \code{upper_limit}.}
 
-\item{end}{Last period to show. Defaults to the latest date in \code{data}.}
+\item{end}{Last period to show. Defaults to the last period of \code{coverage}
+when it is supplied, and otherwise to the latest date in \code{data}. Fix it
+in report code: the latest date in \code{data} moves backwards when the most
+recent feeds are missing, and the window moves with it.}
 
 \item{periods}{Number of periods to show.}
 
@@ -70,6 +75,14 @@ periods always stop.}
 
 \item{zero_reference}{By default a zero upper limit only flags positive
 totals. \code{"compare"} applies the chosen comparison even at zero.}
+
+\item{source_interval}{What one row of \code{data} covers, such as \code{"day"} or
+\code{"week"}, when \code{data} does not record it. Counts from
+\code{\link[=islh_count_events]{islh_count_events()}} record it, so this is for tables built another
+way. See the source-period section.}
+
+\item{coverage}{Optional result from \code{\link[=islh_check_coverage]{islh_check_coverage()}} for the feeds
+behind \code{data}. See the feed-coverage section.}
 }
 \value{
 A wide data frame containing groups, \code{total}, \code{complete}, optional
@@ -84,6 +97,45 @@ the gap were zero.
 operational table: one row per group, recent periods in columns, a current
 total and optional historical reference statistics.
 }
+\section{Source periods}{
+
+
+A row's date says when its period starts, not how long the period is. Two
+counts dated a week apart could be two weekly totals, or two daily counts
+with the six days between them missing, and the totals differ. The
+snapshot therefore needs to know what one row covers:
+\itemize{
+\item counts from \code{\link[=islh_count_events]{islh_count_events()}} and \code{\link[=islh_check_coverage]{islh_check_coverage()}} record it;
+\item \code{source_interval} names it for any other table;
+\item a table of consecutive days is read as daily counts, the one case its
+dates settle.
+}
+
+Otherwise the snapshot stops and asks for \code{source_interval}, rather than
+guess.
+}
+
+\section{Feed coverage}{
+
+
+A site that sent nothing has no rows in an event line list, so it has no
+rows in the counts either, and a snapshot built from those counts leaves
+it out. Worse, the \code{All} row then looks complete. A site that sent some
+days but not others shows filled zeros for the missing days, which look
+like quiet days.
+
+Pass the result of \code{\link[=islh_check_coverage]{islh_check_coverage()}} as \code{coverage} to prevent both.
+Every expected group then appears in the result, and a period whose feed
+was not received is unknown: its count is \code{NA} whatever \code{data} holds for
+it, the group's \code{total} is \code{NA} with \code{complete = FALSE}, and so is the
+\code{All} row. A message says how many periods were unknown. Coverage must
+span the whole window for every expected group, and every group in \code{data}
+must appear in it.
+
+Periods that were received but have no row in \code{data} are still handled by
+\code{missing_periods}.
+}
+
 \section{Alert boundary}{
 
 
@@ -135,8 +187,34 @@ islh_surveillance_snapshot(
   date = date,
   value = count,
   by = site,
+  end = "2026-08-07",
   periods = 7,
   include_total = TRUE
+)
+
+# Site C is expected but sent nothing, and site B missed 6 August. With
+# the coverage check, C appears as unknown rather than vanishing, and the
+# All row is not reported as complete.
+log <- data.frame(
+  site = c(rep("A", 7), rep("B", 6)),
+  date = as.Date("2026-08-01") + c(0:6, 0:4, 6)
+)
+coverage <- islh_check_coverage(
+  log,
+  date = date,
+  by = site,
+  expected = c("A", "B", "C"),
+  from = "2026-08-01",
+  to = "2026-08-07"
+)
+islh_surveillance_snapshot(
+  daily,
+  date = date,
+  value = count,
+  by = site,
+  periods = 7,
+  include_total = TRUE,
+  coverage = coverage
 )
 
 }

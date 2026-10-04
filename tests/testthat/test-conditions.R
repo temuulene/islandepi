@@ -119,7 +119,8 @@ test_that("helpers in the reporting calendar functions name the exported functio
       onset,
       report,
       as_of = 1,
-      max_delay = 2
+      max_delay = 2,
+      maturity = 2
     ),
     "islh_reporting_completeness"
   )

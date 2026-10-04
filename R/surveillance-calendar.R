@@ -239,30 +239,19 @@
   )
 }
 
-# Last resort when a table carries no metadata: read the interval off the
-# spacing of its own period dates. A table built by hand rather than by
-# `islh_count_events()` is still regularly spaced, so this recovers the
-# interval in the ordinary case and returns NULL when it genuinely cannot tell.
+# Last resort when a table carries no metadata. The spacing of the dates only
+# bounds what one row covers: rows seven days apart could be weekly totals or
+# daily counts with six days missing in between, and nothing in the table says
+# which. Only consecutive days settle it, because no period starting on each
+# day can be longer than a day. Anything else returns NULL, and the caller asks
+# for the period to be named.
 .islh_surv_infer_interval <- function(dates) {
   dates <- sort(unique(dates))
   if (length(dates) < 2L) {
     return(NULL)
   }
-  gaps <- as.numeric(diff(dates))
-  if (all(gaps == 1)) {
+  if (all(as.numeric(diff(dates)) == 1)) {
     return("day")
-  }
-  if (all(gaps == 7)) {
-    return("week")
-  }
-  if (all(gaps >= 28 & gaps <= 31)) {
-    return("month")
-  }
-  if (all(gaps >= 89 & gaps <= 92)) {
-    return("quarter")
-  }
-  if (all(gaps >= 365 & gaps <= 366)) {
-    return("year")
   }
   NULL
 }

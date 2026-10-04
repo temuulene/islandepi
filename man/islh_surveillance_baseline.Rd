@@ -45,9 +45,10 @@ deviation limit, where \code{k} is the number of reference periods.}
 \item{minimum_periods}{Minimum reference periods required in every group.}
 
 \item{interval}{Reporting interval of one row of \code{data}. \code{NULL} takes it
-from the metadata \code{\link[=islh_count_events]{islh_count_events()}} leaves on its result, and falls
-back to the spacing of the reference dates. Supply it when \code{data} was
-reshaped in between, or when the dates are irregularly spaced.}
+from the metadata \code{\link[=islh_count_events]{islh_count_events()}} leaves on its result. A table
+without that metadata must name it, unless its dates are consecutive
+days: rows a week apart could be weekly totals or daily counts with days
+missing, and the dates cannot say which.}
 
 \item{timezone}{Reporting timezone for timestamps. Defaults to
 \code{"America/Vancouver"}; Date inputs retain their calendar date.}
@@ -86,6 +87,7 @@ islh_surveillance_baseline(
   date = week,
   value = count,
   by = site,
+  interval = "week",
   method = "mean_sd"
 )
 

@@ -11,9 +11,16 @@
 #' A record with a long delay only appears once it is reported. Near the end
 #' of the data, only the quickly reported events have arrived, so including
 #' them makes delays look shorter than they are. This is called right
-#' truncation. Set `max_delay` to use only events old enough for every delay
-#' up to `max_delay` days to have been seen. Quantiles up to `max_delay` are
-#' then unbiased.
+#' truncation.
+#'
+#' Set `max_delay` to use only events at least `max_delay` days old, which
+#' gives each of them time to show delays up to `max_delay` days. That
+#' removes the worst of the bias, but not all of it: a record that takes
+#' longer than the time since its event has still not arrived, and nothing in
+#' the data says it exists. The summary describes delays among the records
+#' that had arrived by `as_of`. If longer delays occur, the true delays are
+#' longer than it shows. Choose `max_delay` from knowledge of the reporting
+#' system, and check the summary again once the data have matured.
 #'
 #' Records with a missing date, or a report before the event, are left out
 #' with a message. Find them with the `date_order` check in
@@ -118,49 +125,78 @@ islh_reporting_delay <- function(
 
 #' Expected completeness of recent counts
 #'
-#' `islh_reporting_completeness()` estimates, for each recent event date, what
-#' share of its eventual records had been reported by `as_of`. It uses the
-#' delays seen in older events, where every delay up to `max_delay` days has
-#' had time to appear.
+#' `islh_reporting_completeness()` labels recent event dates with how complete
+#' their counts are likely to be. It learns an empirical delay profile, the
+#' share of records that arrive within each number of days, from older events
+#' that you judge to be fully reported, and applies it to the event dates in
+#' the last `max_delay` days before `as_of`.
 #'
-#' Read `expected_complete` as: of all the records that will eventually be
-#' reported for that date, about this share had arrived. A value of 0.4 means
-#' the count is likely to more than double. It is a guide for labelling recent
-#' periods as incomplete, not a forecast.
+#' Read `expected_complete` as: if recent events report like the older ones,
+#' about this share of their eventual records had arrived by `as_of`. A value
+#' of 0.4 means the count is likely to more than double. Use it to label recent
+#' periods as incomplete, not as a forecast of the final count.
 #'
-#' @section Assumptions:
+#' @section What the estimate rests on:
 #'
-#' The estimate assumes recent reporting delays look like those of the older
-#' events it learned from. A holiday, a new data feed or a surge that slows
-#' reporting breaks that. Delays longer than `max_delay` count as not yet
-#' reported, so `expected_complete` never reaches 1 when such delays occur.
+#' Two assumptions, and the result is only as good as either.
+#'
+#' **Maturity.** An event at least `maturity` days before `as_of` has all its
+#' records in. Delays are learned only from those events. The data cannot
+#' check this: a record that has not arrived leaves no trace. If some records
+#' take longer than `maturity` days, the profile misses them and
+#' `expected_complete` is too high. Choose `maturity` from what you know of the
+#' reporting system, not from this data. When older events in the data do show
+#' delays longer than `maturity`, a warning says so, because the assumption is
+#' then visibly wrong.
+#'
+#' **Stability.** Recent events report like the older ones learned from. A
+#' holiday, a new data feed or a surge that slows reporting breaks this.
+#' `learn_days` limits learning to the most recent mature events, which
+#' follows a changing system more closely but uses fewer records.
 #'
 #' With `by`, each group learns from its own delays, which is unstable for
 #' small groups. `delay_records` gives the number of records each estimate
-#' rests on; set `pool = TRUE` to learn one delay pattern from all groups.
+#' rests on; set `pool = TRUE` to learn one profile from all groups.
+#'
+#' This is not a nowcast. It does not model trends in the delays or in the
+#' epidemic curve, and it gives no interval. When the final count itself
+#' matters, use a nowcasting method that adjusts for right truncation
+#' (Charniga et al. 2024).
 #'
 #' @inheritParams islh_reporting_delay
 #' @param as_of Reporting cutoff: the date the data stood at. Required.
-#' @param max_delay Longest delay, in days, to learn. Required. Events from
-#'   the last `max_delay` days are the ones assessed; older events supply the
-#'   delays.
+#' @param max_delay Number of recent days to assess: event dates from
+#'   `as_of - max_delay + 1` to `as_of`. Required.
+#' @param maturity Days after an event by which you judge all its records to
+#'   have arrived. Delays are learned only from events at least this old. Must
+#'   be at least `max_delay`. Required: see the section on assumptions.
+#' @param learn_days Optional number of event days to learn from, counting
+#'   back from `as_of - maturity`. `NULL` learns from every mature event.
 #' @param pool Learn one delay pattern from all groups rather than one per
 #'   group.
 #'
 #' @return One row per group and event date in the last `max_delay` days up to
 #'   `as_of`: the grouping columns, `onset_date`, `days_since_onset`,
 #'   `reported` (records for that date reported by `as_of`),
-#'   `expected_complete` and `delay_records`.
+#'   `expected_complete`, `delay_records` (records in the learning window), and
+#'   `learn_from` and `learn_to` (the event dates delays were learned from).
 #' @export
 #'
+#' @references
+#' Charniga K, Park SW, Akhmetzhanov AR, et al. (2024). Best practices for
+#' estimating and reporting epidemiological delay distributions of
+#' infectious diseases. arXiv:2405.08841.
+#'
 #' @examples
-#' # How complete were the counts by onset date on 20 January?
+#' # How complete were the counts by onset date on 20 January? Records are
+#' # judged complete 21 days after onset.
 #' completeness <- islh_reporting_completeness(
 #'   islh_outbreak,
 #'   onset = date_onset,
 #'   report = date_reported,
 #'   as_of = "2026-01-20",
-#'   max_delay = 10
+#'   max_delay = 10,
+#'   maturity = 21
 #' )
 #' tail(completeness)
 islh_reporting_completeness <- function(
@@ -169,15 +205,17 @@ islh_reporting_completeness <- function(
   report,
   as_of,
   max_delay,
+  maturity,
   by = NULL,
   pool = FALSE,
+  learn_days = NULL,
   timezone = "America/Vancouver"
 ) {
-  if (missing(as_of) || missing(max_delay)) {
+  if (missing(as_of) || missing(max_delay) || missing(maturity)) {
     .islh_abort(c(
-      "Supply both {.arg as_of} and {.arg max_delay}.",
-      i = "Completeness depends on the date the data stood at and on how
-           long a delay to learn."
+      "Supply {.arg as_of}, {.arg max_delay} and {.arg maturity}.",
+      i = "Completeness depends on the date the data stood at, the days
+           assessed, and how long you judge records to take to arrive."
     ))
   }
   pool <- .islh_check_flag(pool, "pool")
@@ -185,7 +223,7 @@ islh_reporting_completeness <- function(
   report_quo <- rlang::enquo(report)
   by_quo <- rlang::enquo(by)
 
-  # Everything known on `as_of`, before the old/recent split.
+  # Everything known on `as_of`, before the learning/assessment split.
   known <- .islh_delay_prepare(
     data,
     onset_quo,
@@ -203,20 +241,62 @@ islh_reporting_completeness <- function(
       "days_since_onset",
       "reported",
       "expected_complete",
-      "delay_records"
+      "delay_records",
+      "learn_from",
+      "learn_to"
     )
   )
   max_delay <- .islh_check_max_delay(max_delay)
+  maturity <- .islh_check_max_delay(maturity, arg = "maturity")
+  if (maturity < max_delay) {
+    .islh_abort(c(
+      "{.arg maturity} must be at least {.arg max_delay}.",
+      x = "Records still arriving after {maturity} day{?s} would be counted as
+           complete for some of the {max_delay} days assessed."
+    ))
+  }
+  if (!is.null(learn_days)) {
+    learn_days <- .islh_check_max_delay(learn_days, arg = "learn_days")
+  }
   as_of <- known$as_of
   work <- known$work
-  learn_until <- as_of - max_delay
-  learn <- work[work$.islh_onset <= learn_until, , drop = FALSE]
+
+  learn_to <- as_of - maturity
+  learn_from <- if (is.null(learn_days)) {
+    suppressWarnings(min(work$.islh_onset[work$.islh_onset <= learn_to]))
+  } else {
+    learn_to - learn_days + 1L
+  }
+  learn <- work[
+    work$.islh_onset <= learn_to & work$.islh_onset >= learn_from,
+    ,
+    drop = FALSE
+  ]
   if (nrow(learn) == 0L) {
     .islh_abort(c(
       "No events are old enough to learn delays from.",
-      i = "Every event is within {max_delay} days of {.arg as_of}. Use a
-           shorter {.arg max_delay} or a later {.arg as_of}."
+      i = "Every event is within {maturity} days of {.arg as_of}. Use a later
+           {.arg as_of}, more history, or a shorter {.arg maturity} if the
+           reporting system supports it."
     ))
+  }
+  if (is.infinite(learn_from)) {
+    learn_from <- min(learn$.islh_onset)
+  }
+
+  beyond <- sum(learn$.islh_delay > maturity)
+  if (beyond > 0L) {
+    .islh_warn(
+      c(
+        "{beyond} learned record{?s} took longer than {.arg maturity}
+         ({maturity} day{?s}) to arrive.",
+        x = "Records still arrive after {maturity} day{?s}, so the assumption
+             behind {.field expected_complete} does not hold, and the values
+             are too high.",
+        i = "Use a longer {.arg maturity}."
+      ),
+      class = "islh_warning_maturity"
+    )
   }
 
   groups <- if (length(by_names) > 0L) {
@@ -224,24 +304,20 @@ islh_reporting_completeness <- function(
   } else {
     data.frame(.islh_all = 1L)
   }
-  key <- function(x) {
-    if (length(by_names) == 0L) {
-      return(rep("", nrow(x)))
-    }
-    do.call(paste, c(unname(lapply(x[by_names], as.character)), sep = "\r"))
-  }
-  learn_key <- if (pool) rep("", nrow(learn)) else key(learn)
-  group_key <- key(groups)
+  ids <- .islh_key_ids(list(work, learn, groups), by_names)
+  work_key <- ids[[1]]
+  learn_key <- if (pool) rep(1L, nrow(learn)) else ids[[2]]
+  group_key <- ids[[3]]
 
   days <- 0:(max_delay - 1L)
   onset_dates <- as_of - days
   rows <- lapply(seq_len(nrow(groups)), function(g) {
-    delays <- learn$.islh_delay[learn_key == if (pool) "" else group_key[g]]
+    delays <- learn$.islh_delay[learn_key == if (pool) 1L else group_key[g]]
     share <- vapply(days, function(d) mean(delays <= d), numeric(1))
     if (length(delays) == 0L) {
       share <- rep(NA_real_, length(days))
     }
-    in_group <- key(work) == group_key[g]
+    in_group <- work_key == group_key[g]
     reported <- vapply(
       onset_dates,
       function(day) sum(in_group & work$.islh_onset == day),
@@ -252,7 +328,9 @@ islh_reporting_completeness <- function(
       days_since_onset = days,
       reported = reported,
       expected_complete = share,
-      delay_records = length(delays)
+      delay_records = length(delays),
+      learn_from = learn_from,
+      learn_to = learn_to
     )
     if (length(by_names) > 0L) {
       piece <- cbind(
@@ -355,7 +433,11 @@ islh_reporting_completeness <- function(
   list(work = work, by = by_names, as_of = as_of)
 }
 
-.islh_check_max_delay <- function(max_delay, call = rlang::caller_env()) {
+.islh_check_max_delay <- function(
+  max_delay,
+  arg = "max_delay",
+  call = rlang::caller_env()
+) {
   if (
     !is.numeric(max_delay) ||
       length(max_delay) != 1L ||
@@ -364,7 +446,7 @@ islh_reporting_completeness <- function(
       max_delay < 1
   ) {
     .islh_abort(
-      "{.arg max_delay} must be one whole number of days, at least 1.",
+      "{.arg {arg}} must be one whole number of days, at least 1.",
       call = call
     )
   }

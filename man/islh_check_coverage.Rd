@@ -62,11 +62,15 @@ like a missing feed.
 \section{Using the result}{
 
 
-A period with \code{received = FALSE} is unknown, not zero. Remove those periods
-from the count table before building a snapshot, and use
-\code{missing_periods = "missing"} in \code{\link[=islh_surveillance_snapshot]{islh_surveillance_snapshot()}} so the
-affected groups show a missing \code{total} and \code{complete = FALSE}. The example
-shows the steps.
+A period with \code{received = FALSE} is unknown, not zero. Pass the result to
+\code{\link[=islh_surveillance_snapshot]{islh_surveillance_snapshot()}} as \code{coverage}. Every expected group then
+appears in the snapshot, even one that sent nothing, and each group with an
+unreceived period shows a missing \code{total} and \code{complete = FALSE}, as does
+the \code{All} row.
+
+Do not drop unreceived periods with a join and pass the counts on alone. A
+site that sent nothing loses every row that way, so it vanishes from the
+snapshot and the \code{All} row looks complete.
 
 Rows from groups that are not in \code{expected} are kept, with
 \code{expected = FALSE}, so a new site or a mistyped site code is visible rather
@@ -108,19 +112,15 @@ daily <- islh_count_events(
   groups = c("A", "B", "C")
 )
 
-# Keep only the periods that were received, then let the snapshot show
-# the gap as unknown.
-known <- merge(
-  daily,
-  coverage[coverage$received, c("site", "period_start")]
-)
+# Give the snapshot the coverage, so the gap is shown as unknown.
 islh_surveillance_snapshot(
-  known,
+  daily,
   date = period_start,
   value = count,
   by = site,
   periods = 7,
   interval = "day",
-  missing_periods = "missing"
+  include_total = TRUE,
+  coverage = coverage
 )
 }

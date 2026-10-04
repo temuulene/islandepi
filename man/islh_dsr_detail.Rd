@@ -29,6 +29,10 @@ usually the oldest age bands. \code{variance_share} shows that directly: a
 stratum with a share of 0.6 carries 60\% of the variance. When one stratum
 dominates, consider broader age bands, a longer period or a larger area,
 applied the same way to every rate being compared.
+
+The detail holds every stratum's cases and population, so treat it as
+internal. \code{\link[=islh_suppress_table]{islh_suppress_table()}} removes it, and this function then stops
+rather than return detail that no longer matches what is visible.
 }
 \examples{
 dsr <- islh_dsr(

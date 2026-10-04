@@ -148,7 +148,14 @@ test_that("missing coverage and incompatible week anchors cannot look complete",
 test_that("zero history does not flag zero current activity", {
   x <- data.frame(day = as.Date("2026-06-01") + 0:3, n = 0)
   b <- islh_surveillance_baseline(x, day, n, interval = "day")
-  z <- islh_surveillance_snapshot(x[1, ], day, n, periods = 1, baseline = b)
+  z <- islh_surveillance_snapshot(
+    x[1, ],
+    day,
+    n,
+    periods = 1,
+    baseline = b,
+    source_interval = "day"
+  )
   expect_false(z$exceeds_reference)
   expect_error(
     islh_surveillance_baseline(

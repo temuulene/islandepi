@@ -17,6 +17,8 @@ islh_farrington(
   no_periods = 10,
   past_weeks_excluded = 26,
   threshold_method = c("nbPlugin", "muan", "delta"),
+  low_count = 5,
+  low_count_weeks = 4,
   timezone = "America/Vancouver"
 )
 }
@@ -50,13 +52,20 @@ current outbreak does not raise its own limit.}
 \item{threshold_method}{\code{"nbPlugin"}, \code{"muan"} or \code{"delta"}. See
 \code{surveillance::farringtonFlexible()}.}
 
+\item{low_count, low_count_weeks}{A week is assessed only when the last
+\code{low_count_weeks} weeks, counting the week assessed, hold at least
+\code{low_count} cases. The defaults, 5 cases in 4 weeks, are the method's
+own. \code{low_count = 0} assesses every week.}
+
 \item{timezone}{Reporting timezone for timestamps. Date values are
 unchanged.}
 }
 \value{
-One row per group and assessed week: the grouping columns,
-\code{period_start}, \code{observed}, \code{expected}, \code{upper_limit}, \code{alarm} and
-\code{pvalue}. \code{alarm} is \code{NA} when the model could not be fitted.
+One row per group and week in \code{from} to \code{to}: the grouping
+columns, \code{period_start}, \code{observed}, \code{expected}, \code{upper_limit}, \code{alarm},
+\code{pvalue} and \code{status}. \code{alarm} is \code{NA} for any week not assessed; see the
+section on weeks that are not assessed. \code{pvalue} is the model's, and is
+reported even when the low-count rule sets a week aside.
 }
 \description{
 \code{islh_farrington()} runs the improved Farrington algorithm from the
@@ -66,11 +75,13 @@ years, allowing for trend, seasonality and overdispersion, and flags a week
 whose count is above the model's upper limit.
 }
 \details{
-Unlike \code{\link[=islh_surveillance_baseline]{islh_surveillance_baseline()}}, this is a detection method with a
-stated false-alarm rate under its model. It still needs local evaluation:
-before relying on it, run it over past seasons, count how many alarms it
-raises and how many real events it would have caught, and set \code{alpha} so
-the alert burden is workable. An alarm is a signal to review, not a finding.
+Unlike \code{\link[=islh_surveillance_baseline]{islh_surveillance_baseline()}}, this is a model-based detection
+method: \code{alpha} is a nominal false-alarm level under the model's
+assumptions, not a guaranteed rate in practice. It still needs local
+evaluation: before relying on it, run it over past seasons, count how many
+alarms it raises and how many real events it would have caught, and set
+\code{alpha} so the alert burden is workable. An alarm is a signal to review,
+not a finding.
 }
 \section{Settings}{
 
@@ -82,9 +93,29 @@ model (\code{past_weeks_excluded = 26}), past outbreaks downweighted above an
 Anscombe residual of 2.58, trend always kept, and a negative binomial
 threshold (\code{"nbPlugin"}). \code{years_back} and \code{window} set which earlier weeks
 the model sees.
+}
 
-Weeks with fewer than 5 cases in the last 4 weeks never raise an alarm,
-which protects against alarms on very small counts.
+\section{Weeks that are not assessed}{
+
+
+\code{status} says what happened to each week:
+\itemize{
+\item \code{"assessed"}: the model gave an upper limit, and \code{alarm} is \code{TRUE} or
+\code{FALSE}.
+\item \code{"low_count_rule"}: fewer than \code{low_count} cases in the last
+\code{low_count_weeks} weeks, counting the week assessed. The method does not
+assess such weeks, to avoid alarms on very small counts, so \code{alarm},
+\code{expected} and \code{upper_limit} are \code{NA}.
+\item \code{"fit_failed"}: the model could not be fitted, and \code{alarm} is \code{NA}.
+}
+
+A week that was not assessed is not a week without a signal. Show the
+status in any table of results, so a reader can tell a quiet week from one
+the method set aside. For rare conditions the low-count rule sets aside
+most weeks; whether that is acceptable is an alerting-policy decision, and
+\code{low_count} and \code{low_count_weeks} make it explicit.
+
+The result records the settings used in its \code{islh_farrington} attribute.
 }
 
 \examples{

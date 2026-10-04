@@ -271,3 +271,93 @@ test_that("a roster check stops when an expected code is missing", {
   expect_error(.islh_check_expected_codes(c("411", NA)), "text codes")
   expect_equal(.islh_check_expected_codes(c("411", "411")), "411")
 })
+
+# A slice of the real pinned LHA population resource, with every column:
+# Island Health's 14 LHAs, one LHA elsewhere and the BC total, for 2025
+# (estimates) and 2026 (projections). See fixtures/README.md.
+real_lha_population <- function() {
+  utils::read.csv(
+    test_path("fixtures", "bc-lha-population.csv"),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+}
+
+island_lha_codes <- c(
+  "411",
+  "412",
+  "413",
+  "414",
+  "421",
+  "422",
+  "423",
+  "424",
+  "425",
+  "426",
+  "431",
+  "432",
+  "433",
+  "434"
+)
+
+test_that("the adapter reads the current catalogue schema", {
+  raw <- real_lha_population()
+  local_mocked_bindings(
+    .islh_require_packages = function(...) invisible(TRUE),
+    .islh_fetch_bc_population = function(record_id, resource_id) raw,
+    .package = "islandepi"
+  )
+
+  out <- islh_bc_population(
+    "lha",
+    years = 2025,
+    age_breaks = "five_year",
+    expected_codes = island_lha_codes
+  )
+  island <- out[out$geography_code %in% island_lha_codes, ]
+
+  expect_setequal(unique(island$geography_code), island_lha_codes)
+  expect_equal(unique(out$estimate_type), "Estimate")
+  expect_false(any(c("000", "0") %in% out$geography_code))
+
+  # Female plus male age bands add up to the source's own total-sex row.
+  totals <- raw[raw$Year == 2025 & raw$Gender == "T", c("Region", "Total")]
+  totals$code <- sprintf("%03d", totals$Region)
+  summed <- tapply(island$population, island$geography_code, sum)
+  expect_equal(
+    as.vector(summed[island_lha_codes]),
+    totals$Total[match(island_lha_codes, totals$code)]
+  )
+  expect_equal(
+    island$geography_name[island$geography_code == "433"][1],
+    "Vancouver Island West"
+  )
+})
+
+test_that("projections are requested explicitly and missing codes stop", {
+  raw <- real_lha_population()
+  local_mocked_bindings(
+    .islh_require_packages = function(...) invisible(TRUE),
+    .islh_fetch_bc_population = function(record_id, resource_id) raw,
+    .package = "islandepi"
+  )
+
+  projected <- islh_bc_population(
+    "lha",
+    years = 2026,
+    sex = "T",
+    estimate_type = "Projection"
+  )
+  expect_equal(unique(projected$estimate_type), "Projection")
+  expect_equal(unique(projected$sex), "T")
+
+  expect_error(
+    islh_bc_population(
+      "lha",
+      years = 2025,
+      expected_codes = c(island_lha_codes, "499")
+    ),
+    "499",
+    class = "islh_error"
+  )
+})

@@ -90,7 +90,8 @@ test_that("completeness uses only events old enough to learn from", {
     onset,
     report,
     as_of = "2026-01-13",
-    max_delay = 3
+    max_delay = 3,
+    maturity = 3
   )
   expect_equal(
     out$onset_date,
@@ -112,7 +113,8 @@ test_that("records reported after as_of are not counted as reported", {
     onset,
     report,
     as_of = "2026-01-11",
-    max_delay = 2
+    max_delay = 2,
+    maturity = 2
   ))
   expect_equal(out$reported[out$onset_date == as.Date("2026-01-10")], 1)
 })
@@ -130,6 +132,7 @@ test_that("completeness can pool groups or learn per group", {
     report,
     as_of = "2026-01-10",
     max_delay = 2,
+    maturity = 2,
     by = site
   ))
   same_day <- per_group[per_group$days_since_onset == 0, ]
@@ -140,6 +143,7 @@ test_that("completeness can pool groups or learn per group", {
     report,
     as_of = "2026-01-10",
     max_delay = 2,
+    maturity = 2,
     by = site,
     pool = TRUE
   ))
@@ -158,8 +162,130 @@ test_that("completeness requires a cutoff and something to learn from", {
       onset,
       report,
       as_of = "2026-01-03",
-      max_delay = 5
+      max_delay = 5,
+      maturity = 5
     ),
     "old enough"
   )
+})
+
+# Half of each day's records arrive after 1 day, half after 20.
+two_speed <- function(days = 41) {
+  onset <- rep(as.Date("2025-12-01") + 0:(days - 1), each = 2)
+  data.frame(onset = onset, report = onset + rep(c(1, 20), days))
+}
+
+test_that("a long enough maturity recovers a slow reporting tail", {
+  out <- suppressMessages(islh_reporting_completeness(
+    two_speed(),
+    onset,
+    report,
+    as_of = "2026-01-10",
+    max_delay = 10,
+    maturity = 25
+  ))
+  expect_equal(out$expected_complete[out$days_since_onset == 1], 0.5)
+  expect_equal(unique(out$learn_to), as.Date("2025-12-16"))
+  expect_equal(unique(out$learn_from), as.Date("2025-12-01"))
+})
+
+test_that("older events that contradict maturity raise a warning", {
+  # With maturity = 10, events from early December already show 20-day
+  # delays, so the assumption is visibly wrong.
+  expect_warning(
+    suppressMessages(islh_reporting_completeness(
+      two_speed(),
+      onset,
+      report,
+      as_of = "2026-01-10",
+      max_delay = 10,
+      maturity = 10
+    )),
+    class = "islh_warning_maturity"
+  )
+})
+
+test_that("an unseen tail cannot be detected, so nothing is learned", {
+  # The reviewer's example: on 11 January, no event is old enough to have
+  # shown its 20-day records. A maturity that covers them leaves nothing to
+  # learn from, and the function says so rather than report full
+  # completeness.
+  onsets <- rep(as.Date(c("2026-01-01", "2026-01-10")), each = 20)
+  line_list <- data.frame(
+    onset = onsets,
+    report = onsets + rep(rep(c(1, 20), each = 10), 2)
+  )
+  expect_error(
+    suppressMessages(islh_reporting_completeness(
+      line_list,
+      onset,
+      report,
+      as_of = "2026-01-11",
+      max_delay = 10,
+      maturity = 21
+    )),
+    "old enough",
+    class = "islh_error"
+  )
+})
+
+test_that("learn_days limits learning to recent mature events", {
+  out <- suppressMessages(islh_reporting_completeness(
+    two_speed(),
+    onset,
+    report,
+    as_of = "2026-01-10",
+    max_delay = 10,
+    maturity = 25,
+    learn_days = 7
+  ))
+  expect_equal(unique(out$learn_from), as.Date("2025-12-10"))
+  expect_equal(unique(out$delay_records), 14)
+})
+
+test_that("maturity must cover the days assessed", {
+  expect_error(
+    islh_reporting_completeness(
+      two_speed(),
+      onset,
+      report,
+      as_of = "2026-01-10",
+      max_delay = 10,
+      maturity = 5
+    ),
+    "at least",
+    class = "islh_error"
+  )
+  expect_error(
+    islh_reporting_completeness(
+      two_speed(),
+      onset,
+      report,
+      as_of = "2026-01-10",
+      max_delay = 10
+    ),
+    "maturity",
+    class = "islh_error"
+  )
+})
+
+test_that("a missing group and the text \"NA\" learn separately", {
+  x <- data.frame(
+    site = rep(c(NA_character_, "NA"), each = 10),
+    onset = rep(as.Date("2026-01-01") + 0:9, 2),
+    delay = c(rep(0, 10), rep(1, 10))
+  )
+  x$report <- x$onset + x$delay
+  out <- suppressMessages(islh_reporting_completeness(
+    x,
+    onset,
+    report,
+    as_of = "2026-01-10",
+    max_delay = 2,
+    maturity = 2,
+    by = site
+  ))
+  same_day <- out[out$days_since_onset == 0, ]
+  expect_equal(same_day$expected_complete[is.na(same_day$site)], 1)
+  expect_equal(same_day$expected_complete[same_day$site %in% "NA"], 0)
 })

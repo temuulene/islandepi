@@ -38,7 +38,8 @@
 #' @param season_start First day of the current season, on a period boundary.
 #'   Required for `"season_to_date"`.
 #' @param interval Reporting period of one row. `NULL` takes it from the
-#'   metadata [islh_count_events()] leaves, or from the spacing of the dates.
+#'   metadata [islh_count_events()] leaves. A table without that metadata must
+#'   name it, unless its dates are consecutive days.
 #' @param week_start Start of an ordinary week, from 1 (Monday) to 7 (Sunday),
 #'   when `interval` is `"week"` and there is no metadata.
 #' @param timezone Reporting timezone for timestamps. Date values are
@@ -139,9 +140,14 @@ islh_compare_periods <- function(
 
   interval <- .islh_surv_resolve_interval(interval, meta, work$.islh_date)
   if (is.null(interval)) {
-    .islh_abort(
-      "Supply {.arg interval}; the reporting period cannot be inferred."
-    )
+    .islh_abort(c(
+      "Supply {.arg interval}.",
+      x = "{.arg data} does not record what one row covers, and its dates are
+           not consecutive days.",
+      i = "Rows seven days apart could be weekly totals or daily counts with
+           days missing. Name the period, or build the counts with
+           {.fn islh_count_events}, which records it."
+    ))
   }
   anchor <- if (!is.null(meta$week_start)) {
     meta$week_start
@@ -218,26 +224,35 @@ islh_compare_periods <- function(
     )
   }
 
-  groups <- unique(work[by_names])
-  if (length(by_names) == 0L) {
-    groups <- data.frame(.islh_all = 1L)
-    work$.islh_all <- 1L
+  # Every row a comparison reads must be a whole period.
+  used <- unique(do.call(
+    c,
+    unname(lapply(windows, function(w) {
+      c(
+        .islh_surv_period_sequence(w$current[1], w$current[2], interval),
+        .islh_surv_period_sequence(w$reference[1], w$reference[2], interval)
+      )
+    }))
+  ))
+  .islh_surv_check_partial(work, work$.islh_date %in% used)
+
+  groups <- if (length(by_names) > 0L) {
+    unique(work[by_names])
+  } else {
+    data.frame(.islh_all = 1L)
   }
-  group_key <- function(x) {
-    cols <- if (length(by_names)) by_names else ".islh_all"
-    do.call(paste, c(unname(lapply(x[cols], as.character)), sep = "\r"))
-  }
-  work$.islh_group <- group_key(work)
-  groups$.islh_group <- group_key(groups)
+  ids <- .islh_key_ids(list(work, groups), by_names)
+  work$.islh_group <- ids[[1]]
+  groups$.islh_group <- ids[[2]]
 
   window_sum <- function(from, to) {
     periods <- .islh_surv_period_sequence(from, to, interval)
     sub <- work[work$.islh_date %in% periods, , drop = FALSE]
     totals <- tapply(sub$.islh_value, sub$.islh_group, sum)
     present <- tapply(sub$.islh_date, sub$.islh_group, length)
-    value <- as.numeric(totals[groups$.islh_group])
-    complete <- !is.na(present[groups$.islh_group]) &
-      present[groups$.islh_group] == length(periods)
+    key <- as.character(groups$.islh_group)
+    value <- as.numeric(totals[key])
+    complete <- !is.na(present[key]) & present[key] == length(periods)
     value[!complete] <- NA_real_
     list(value = value, periods = length(periods))
   }

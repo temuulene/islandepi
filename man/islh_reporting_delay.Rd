@@ -55,9 +55,16 @@ complete.
 A record with a long delay only appears once it is reported. Near the end
 of the data, only the quickly reported events have arrived, so including
 them makes delays look shorter than they are. This is called right
-truncation. Set \code{max_delay} to use only events old enough for every delay
-up to \code{max_delay} days to have been seen. Quantiles up to \code{max_delay} are
-then unbiased.
+truncation.
+
+Set \code{max_delay} to use only events at least \code{max_delay} days old, which
+gives each of them time to show delays up to \code{max_delay} days. That
+removes the worst of the bias, but not all of it: a record that takes
+longer than the time since its event has still not arrived, and nothing in
+the data says it exists. The summary describes delays among the records
+that had arrived by \code{as_of}. If longer delays occur, the true delays are
+longer than it shows. Choose \code{max_delay} from knowledge of the reporting
+system, and check the summary again once the data have matured.
 
 Records with a missing date, or a report before the event, are left out
 with a message. Find them with the \code{date_order} check in

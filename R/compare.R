@@ -14,7 +14,12 @@
 #' * Key columns must have compatible types in both tables, as in
 #'   [islh_join_denominator()]. Missing key values match each other.
 #' * Numeric columns match when they differ by no more than `tolerance`.
-#'   Other columns must be identical as text, so a suppressed `"Suppressed"`
+#'   With the default `tolerance = 0` they must be exactly equal: any
+#'   difference at all is reported. With a positive tolerance, a difference
+#'   that exceeds it only by floating-point error, such as `78.45 - 78.40`
+#'   against `0.05`, counts as within it.
+#' * Infinite values match only the same infinite value.
+#' * Other columns must be identical as text, so a suppressed `"Suppressed"`
 #'   in one table and `3` in the other is reported as different.
 #' * Two missing values match. A missing value and a present one do not.
 #'
@@ -85,8 +90,11 @@ islh_compare_outputs <- function(
     ))
   }
 
-  x_key <- .islh_key_strings(x, y, by, "x", "y", allow_na = TRUE)
-  y_key <- .islh_key_strings(y, x, by, "y", "x", allow_na = TRUE)
+  .islh_check_key_columns(x, y, by, "x", "y", allow_na = TRUE)
+  .islh_check_key_columns(y, x, by, "y", "x", allow_na = TRUE)
+  keys <- .islh_key_ids(list(x, y), by)
+  x_key <- keys[[1]]
+  y_key <- keys[[2]]
   for (side in c("x", "y")) {
     key <- if (side == "x") x_key else y_key
     repeated <- unique(key[duplicated(key)])
@@ -155,11 +163,8 @@ islh_compare_outputs <- function(
     yv <- y[[v]][in_y]
     both_numeric <- is.numeric(x[[v]]) && is.numeric(y[[v]])
     difference <- if (both_numeric) xv - yv else rep(NA_real_, length(xv))
-    # The small allowance absorbs floating-point error, so 78.45 and 78.40
-    # match at a tolerance of 0.05.
     same <- if (both_numeric) {
-      (is.na(xv) & is.na(yv)) |
-        (!is.na(difference) & abs(difference) <= tolerance + 1e-9)
+      .islh_numeric_match(xv, yv, tolerance)
     } else {
       xs <- as.character(xv)
       ys <- as.character(yv)
@@ -190,4 +195,21 @@ islh_compare_outputs <- function(
   }
   rownames(out) <- NULL
   out
+}
+
+# Numeric cells match when both are missing, when they are equal (which
+# covers two identical infinite values), or, with a positive tolerance, when
+# they differ by no more than it. The allowance scales with the values, so it
+# absorbs the rounding in a subtraction such as 78.45 - 78.40 and nothing
+# more. A zero tolerance means exact equality.
+.islh_numeric_match <- function(x, y, tolerance) {
+  both_missing <- is.na(x) & is.na(y)
+  equal <- !is.na(x) & !is.na(y) & x == y
+  if (tolerance == 0) {
+    return(both_missing | equal)
+  }
+  difference <- abs(x - y)
+  allowance <- 64 * .Machine$double.eps * pmax(abs(x), abs(y), tolerance)
+  within <- is.finite(difference) & difference <= tolerance + allowance
+  both_missing | equal | within
 }

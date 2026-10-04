@@ -117,10 +117,12 @@ islh_check_events <- function(
   allowed <- .islh_check_allowed(allowed, data)
   date_order <- .islh_check_date_order(date_order, data)
 
+  # Composite IDs are matched as tuples. The pasted labels are only for
+  # display in the issues table.
   ids <- if (length(id_names) == 1L) {
     data[[id_names]]
   } else {
-    do.call(paste, c(lapply(data[id_names], as.character), list(sep = " | ")))
+    .islh_key_labels(data, id_names)
   }
   date_info <- .islh_surv_date_info(data[[date_name]], timezone)
   # Each check appends its rows. Assigning NULL to a new list element is a
@@ -171,11 +173,12 @@ islh_check_events <- function(
   )
   if (isTRUE(one_row_per_id)) {
     duplicate <- present_id &
-      (duplicated(ids) | duplicated(ids, fromLast = TRUE))
+      (.islh_key_duplicated(data, id_names) |
+        .islh_key_duplicated(data, id_names, from_last = TRUE))
     issues[[length(issues) + 1L]] <- issue_rows(
       duplicate,
       "duplicate_id",
-      paste(id_names, collapse = " | "),
+      paste(id_names, collapse = ", "),
       ids
     )
   }

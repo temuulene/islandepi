@@ -116,14 +116,11 @@ islh_join_denominator <- function(
     .islh_abort("{.arg population} has no rows.")
   }
 
-  data_key <- .islh_key_strings(data, population, by, "data", "population")
-  population_key <- .islh_key_strings(
-    population,
-    data,
-    by,
-    "population",
-    "data"
-  )
+  .islh_check_key_columns(data, population, by, "data", "population")
+  .islh_check_key_columns(population, data, by, "population", "data")
+  keys <- .islh_key_ids(list(data, population), by)
+  data_key <- keys[[1]]
+  population_key <- keys[[2]]
 
   repeated <- unique(population_key[duplicated(population_key)])
   if (length(repeated) > 0L) {
@@ -189,10 +186,11 @@ islh_join_denominator <- function(
   by
 }
 
-# One string per row identifying its key, after checking the key columns exist
-# and are compatible with the other table's. Text and factors compare as text;
-# text never matches a number, because leading zeros in a code are lost.
-.islh_key_strings <- function(
+# Checks the key columns exist and are compatible with the other table's.
+# Text and factors compare as text; text never matches a number, because
+# leading zeros in a code are lost. Rows are then matched with
+# .islh_key_ids().
+.islh_check_key_columns <- function(
   x,
   other,
   by,
@@ -249,15 +247,7 @@ islh_join_denominator <- function(
       }
     }
   }
-  if (nrow(x) == 0L) {
-    return(character())
-  }
-  parts <- lapply(x[by], function(v) {
-    out <- as.character(v)
-    out[is.na(v)] <- "\u001fNA"
-    out
-  })
-  do.call(paste, c(unname(parts), list(sep = "\u001e")))
+  invisible(by)
 }
 
 # "year = 2025, age_group = \"0-19\"" for the first few rows of a key table.

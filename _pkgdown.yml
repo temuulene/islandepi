@@ -97,12 +97,14 @@ reference:
 
   - title: Disclosure control
     desc: >
-      Apply suppression or rounding mechanics. Thresholds and rounding bases
-      must be supplied explicitly for the release being prepared.
+      Apply suppression or rounding mechanics, then make a copy that is safe
+      to share. Thresholds, rounding bases and released columns must be
+      supplied explicitly for the release being prepared.
     contents:
       - islh_suppress
       - islh_suppress_table
       - islh_suppression_audit
+      - islh_release_copy
       - islh_round_base
 
   - title: Output checks

@@ -34,9 +34,10 @@
 #' @param probs Lower and upper probabilities used by `"quantile"`.
 #' @param minimum_periods Minimum reference periods required in every group.
 #' @param interval Reporting interval of one row of `data`. `NULL` takes it
-#'   from the metadata [islh_count_events()] leaves on its result, and falls
-#'   back to the spacing of the reference dates. Supply it when `data` was
-#'   reshaped in between, or when the dates are irregularly spaced.
+#'   from the metadata [islh_count_events()] leaves on its result. A table
+#'   without that metadata must name it, unless its dates are consecutive
+#'   days: rows a week apart could be weekly totals or daily counts with days
+#'   missing, and the dates cannot say which.
 #'
 #' @return One row per group with the number of reference periods, descriptive
 #'   statistics and lower and upper limits. The result records the duration its
@@ -64,6 +65,7 @@
 #'   date = week,
 #'   value = count,
 #'   by = site,
+#'   interval = "week",
 #'   method = "mean_sd"
 #' )
 #'
@@ -177,9 +179,14 @@ islh_surveillance_baseline <- function(
   }
 
   if (is.null(reference_interval)) {
-    .islh_abort(
-      "Supply {.arg interval}; the reference period cannot be inferred."
-    )
+    .islh_abort(c(
+      "Supply {.arg interval}.",
+      x = "{.arg data} does not record what one row covers, and its dates are
+           not consecutive days.",
+      i = "Rows seven days apart could be weekly totals or daily counts with
+           days missing. Name the period, or build the counts with
+           {.fn islh_count_events}, which records it."
+    ))
   }
   reference_week_start <- if (!is.null(data_meta$week_start)) {
     data_meta$week_start

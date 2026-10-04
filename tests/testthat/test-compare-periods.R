@@ -106,16 +106,37 @@ test_that("compare periods uses count metadata and warns on distinct-ID sums", {
 test_that("compare periods validates its inputs", {
   x <- weekly_counts()
   expect_error(
-    islh_compare_periods(x, week, n, by = site, comparison = "season_to_date"),
+    islh_compare_periods(
+      x,
+      week,
+      n,
+      by = site,
+      interval = "week",
+      comparison = "season_to_date"
+    ),
     "season_start"
   )
   expect_error(
-    islh_compare_periods(x, week, n, by = site, current = "2026-01-06"),
+    islh_compare_periods(
+      x,
+      week,
+      n,
+      by = site,
+      interval = "week",
+      current = "2026-01-06"
+    ),
     "start of a week"
   )
   expect_error(islh_compare_periods(x, week, n), "more than one row")
   expect_error(
-    islh_compare_periods(x, week, n, by = site, comparison = "last_week"),
+    islh_compare_periods(
+      x,
+      week,
+      n,
+      by = site,
+      interval = "week",
+      comparison = "last_week"
+    ),
     "one or more"
   )
   names(x)[1] <- "current"

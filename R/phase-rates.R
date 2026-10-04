@@ -363,6 +363,10 @@ islh_dsr <- function(
 #' dominates, consider broader age bands, a longer period or a larger area,
 #' applied the same way to every rate being compared.
 #'
+#' The detail holds every stratum's cases and population, so treat it as
+#' internal. [islh_suppress_table()] removes it, and this function then stops
+#' rather than return detail that no longer matches what is visible.
+#'
 #' @param x A result from [islh_dsr()] or [islh_dsr_joined()].
 #'
 #' @return A data frame with one row per stratum. [islh_dsr()] gives a
@@ -387,6 +391,14 @@ islh_dsr <- function(
 #' sum(detail$contribution)
 #' dsr$rate
 islh_dsr_detail <- function(x) {
+  if (isTRUE(attr(x, "islh_detail_removed", exact = TRUE))) {
+    .islh_abort(c(
+      "{.arg x} has been through {.fn islh_suppress_table}.",
+      x = "Its stratum detail was removed, because the stratum counts could
+           reveal what suppression hid.",
+      i = "Read the detail from the result before suppressing it."
+    ))
+  }
   detail <- attr(x, "islh_dsr_strata", exact = TRUE)
   if (!is.data.frame(x) || is.null(detail)) {
     .islh_abort(c(

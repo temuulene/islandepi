@@ -315,7 +315,8 @@ test_that("snapshot fills missing periods only by explicit request", {
     by = site,
     end = "2026-08-03",
     missing_periods = "zero",
-    periods = 3
+    periods = 3,
+    source_interval = "day"
   )
   expect_equal(out[["2026-08-02"]], 0)
   expect_equal(out$total, 6)
@@ -348,7 +349,8 @@ test_that("snapshot prevents ambiguous totals and baselines", {
       by = site,
       baseline = baseline,
       baseline_interval = "day",
-      periods = 1
+      periods = 1,
+      source_interval = "day"
     ),
     "one row per group"
   )
@@ -395,23 +397,29 @@ test_that("a baseline carries the duration its limits describe", {
   expect_equal(attr(baseline, "islh_periods"), 1L)
 })
 
-test_that("a baseline infers its interval from date spacing alone", {
-  # A table built by hand carries no metadata, but its dates are still evenly
-  # spaced, so the reporting period is recoverable.
+test_that("spacing alone only establishes daily counts", {
+  # Rows seven days apart could be weekly totals or daily counts with days
+  # missing, so a table without metadata must say which. Consecutive days are
+  # the one case the dates settle.
   weekly <- data.frame(
     week = seq(as.Date("2026-01-05"), by = "week", length.out = 8),
     count = c(2, 4, 3, 5, 2, 4, 3, 5)
   )
-  baseline <- islh_surveillance_baseline(weekly, week, count)
+  expect_error(
+    islh_surveillance_baseline(weekly, week, count),
+    "interval",
+    class = "islh_error"
+  )
+  baseline <- islh_surveillance_baseline(weekly, week, count, interval = "week")
   expect_equal(attr(baseline, "islh_interval"), "week")
 
-  monthly <- data.frame(
-    month = seq(as.Date("2026-01-01"), by = "month", length.out = 8),
+  daily <- data.frame(
+    day = seq(as.Date("2026-01-05"), by = "day", length.out = 8),
     count = c(2, 4, 3, 5, 2, 4, 3, 5)
   )
   expect_equal(
-    attr(islh_surveillance_baseline(monthly, month, count), "islh_interval"),
-    "month"
+    attr(islh_surveillance_baseline(daily, day, count), "islh_interval"),
+    "day"
   )
 })
 
@@ -637,7 +645,8 @@ test_that("a total exactly equal to the upper limit is flagged with the inclusiv
     periods = 1,
     comparison = "at_or_above",
     baseline = baseline,
-    baseline_interval = "day"
+    baseline_interval = "day",
+    source_interval = "day"
   )
 
   expect_equal(out$total, c(9, 10, 11))
@@ -659,7 +668,8 @@ test_that("a group with no upper limit gets a missing flag, not FALSE", {
     by = site,
     periods = 1,
     baseline = baseline,
-    baseline_interval = "day"
+    baseline_interval = "day",
+    source_interval = "day"
   )
   expect_equal(out$exceeds_reference, c(TRUE, NA))
 })
@@ -889,8 +899,8 @@ test_that("composite keys identify duplicates across every key column", {
   )
   duplicates <- issues[issues$.issue == "duplicate_id", ]
   expect_equal(duplicates$.row, 1:2)
-  expect_equal(duplicates$.id, rep("P1 | 2026-01-01", 2))
-  expect_equal(duplicates$.field, rep("person | visit", 2))
+  expect_equal(duplicates$.id, rep("person = \"P1\", visit = 2026-01-01", 2))
+  expect_equal(duplicates$.field, rep("person, visit", 2))
   missing <- issues[issues$.issue == "missing_id", ]
   expect_equal(missing$.row, 4L)
   expect_equal(missing$.field, "person")

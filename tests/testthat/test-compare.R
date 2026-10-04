@@ -99,3 +99,47 @@ test_that("ambiguous comparisons are refused", {
   only_keys <- new_output["hsda"]
   expect_error(islh_compare_outputs(only_keys, only_keys, "hsda"), "share no")
 })
+
+test_that("zero tolerance reports any numeric difference at all", {
+  out <- islh_compare_outputs(
+    data.frame(id = 1, value = 0),
+    data.frame(id = 1, value = 5e-10),
+    by = "id"
+  )
+  expect_equal(out$status, "different")
+})
+
+test_that("identical infinite values match and opposite ones do not", {
+  same <- islh_compare_outputs(
+    data.frame(id = 1:2, value = c(Inf, -Inf)),
+    data.frame(id = 1:2, value = c(Inf, -Inf)),
+    by = "id"
+  )
+  expect_equal(nrow(same), 0L)
+
+  flipped <- islh_compare_outputs(
+    data.frame(id = 1, value = Inf),
+    data.frame(id = 1, value = -Inf),
+    by = "id",
+    tolerance = 1
+  )
+  expect_equal(flipped$status, "different")
+})
+
+test_that("a positive tolerance absorbs floating-point error only", {
+  rounded <- islh_compare_outputs(
+    data.frame(id = 1, value = 78.45),
+    data.frame(id = 1, value = 78.40),
+    by = "id",
+    tolerance = 0.05
+  )
+  expect_equal(nrow(rounded), 0L)
+
+  beyond <- islh_compare_outputs(
+    data.frame(id = 1, value = 78.4501),
+    data.frame(id = 1, value = 78.40),
+    by = "id",
+    tolerance = 0.05
+  )
+  expect_equal(beyond$status, "different")
+})

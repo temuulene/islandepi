@@ -28,13 +28,13 @@
 # How many identifiers appear in more than one period, and in more than one
 # group? Distinct-ID counts only add up to distinct people when both are zero.
 .islh_surv_id_repeats <- function(work, id, by) {
-  ids <- as.character(work[[id]])
+  ids <- work[[id]]
   repeated <- function(key) {
     pairs <- unique(data.frame(id = ids, key = key, stringsAsFactors = FALSE))
     length(unique(pairs$id[duplicated(pairs$id)]))
   }
   groups <- if (length(by) > 0L) {
-    repeated(do.call(paste, c(unname(as.list(work[by])), sep = "\r")))
+    repeated(.islh_key_ids(list(work), by)[[1]])
   } else {
     0L
   }
@@ -136,6 +136,44 @@
   invisible(NULL)
 }
 
+# A partial period holds only part of its days, so its count is not a count
+# for the period its date names. `partial_period` comes from
+# islh_count_events(include_partial = TRUE). A missing flag is unknown, and
+# unknown is refused too. Every function that treats a row as a whole period
+# calls this on the rows it uses.
+.islh_surv_check_partial <- function(
+  work,
+  rows = rep(TRUE, nrow(work)),
+  call = rlang::caller_env()
+) {
+  if (!"partial_period" %in% names(work)) {
+    return(invisible(NULL))
+  }
+  flag <- work$partial_period[rows]
+  if (!is.logical(flag)) {
+    .islh_abort(
+      "{.field partial_period} must be logical.",
+      call = call
+    )
+  }
+  bad <- is.na(flag) | flag
+  if (any(bad)) {
+    dates <- format(sort(unique(work$.islh_date[rows][bad])))
+    .islh_abort(
+      c(
+        "{.arg data} contains partial periods.",
+        x = "{cli::qty(length(dates))}Partial or unknown: {.val {dates}}.",
+        i = "A partial period's count does not cover the period its date
+             names. Recount the original events with
+             {.code include_partial = FALSE}, or end the analysis before the
+             partial period."
+      ),
+      call = call
+    )
+  }
+  invisible(NULL)
+}
+
 # Shared by islh_count_events() (recounting preaggregated input) and
 # islh_surveillance_snapshot(). `context` words each error for the function
 # that raised it, since only the snapshot has a `missing_periods` argument.
@@ -147,6 +185,7 @@
   to,
   policy,
   context = c("snapshot", "count"),
+  groups = NULL,
   call = rlang::caller_env()
 ) {
   context <- match.arg(context)
@@ -181,21 +220,11 @@
     )
   }
   selected <- work$.islh_date >= from & work$.islh_date <= to
-  if (
-    "partial_period" %in%
-      names(work) &&
-      any(is.na(work$partial_period[selected]) | work$partial_period[selected])
-  ) {
-    .islh_abort(
-      c(
-        "{.arg data} contains partial periods.",
-        i = "Recount the original events with {.code include_partial = FALSE}."
-      ),
-      call = call
-    )
-  }
+  .islh_surv_check_partial(work, selected, call = call)
   dates <- .islh_surv_period_sequence(starts, last, meta$interval)
-  grid <- .islh_surv_grid(unique(work[by]), dates, by)
+  # `groups` is the roster that must appear even without rows, such as an
+  # expected site that sent nothing.
+  grid <- .islh_surv_grid(groups %||% unique(work[by]), dates, by)
   names(grid)[names(grid) == "period_start"] <- ".islh_date"
   work$.islh_present <- TRUE
   out <- dplyr::left_join(

@@ -37,7 +37,8 @@ and \code{"season_to_date"}.}
 Required for \code{"season_to_date"}.}
 
 \item{interval}{Reporting period of one row. \code{NULL} takes it from the
-metadata \code{\link[=islh_count_events]{islh_count_events()}} leaves, or from the spacing of the dates.}
+metadata \code{\link[=islh_count_events]{islh_count_events()}} leaves. A table without that metadata must
+name it, unless its dates are consecutive days.}
 
 \item{week_start}{Start of an ordinary week, from 1 (Monday) to 7 (Sunday),
 when \code{interval} is \code{"week"} and there is no metadata.}

@@ -32,5 +32,14 @@ install_phase_zip <- function(zip, package, version, install_dependencies = TRUE
   if (as.character(utils::packageVersion(package, lib.loc = lib)) != version) {
     stop("Installed version does not match the approved version.")
   }
+  # Loading proves the dependencies resolve; a small calculation proves the
+  # package runs, not just that its files are in place.
+  loadNamespace(package, lib.loc = c(lib, .libPaths()))
+  run <- function(name, ...) getExportedValue(package, name)(...)
+  works <- switch(package,
+    islandepi = isTRUE(all.equal(run("islh_crude_rate", 5, 1000)$rate, 500)),
+    islandbrand = grepl("^#[0-9A-Fa-f]{6}$", run("islh_brand", "primary")))
+  if (!isTRUE(works)) stop("The package installed but its check calculation failed.")
+  message(package, " ", version, " installed, loaded and checked.")
   invisible(utils::packageDescription(package, lib.loc = lib))
 }

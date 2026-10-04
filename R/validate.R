@@ -300,14 +300,15 @@
   cols,
   data,
   arg = "cols",
+  purpose = "suppress",
   call = rlang::caller_env()
 ) {
   if (missing(cols) || is.null(cols)) {
     .islh_abort(
       c(
-        "{.arg {arg}} must name the columns to suppress.",
-        i = "There is no default: suppressing every column, or none, is a
-           decision the caller has to make."
+        "{.arg {arg}} must name the columns to {purpose}.",
+        i = "There is no default: choosing the columns is a decision the
+           caller has to make."
       ),
       call = call
     )
@@ -342,7 +343,7 @@
   if (length(cols) == 0L) {
     .islh_abort(
       c(
-        "{.arg {arg}} is empty, so nothing would be suppressed.",
+        "{.arg {arg}} is empty, so there is nothing to {purpose}.",
         i = "Name at least one column, or do not call this function."
       ),
       call = call
@@ -405,8 +406,12 @@
       c(
         "{.arg {arg}} names the same column more than once.",
         x = "Repeated: {.field {duplicated_cols}}.",
-        i = "Suppressing a column twice hides a second cell that the rule never
+        i = if (purpose == "suppress") {
+          "Suppressing a column twice hides a second cell that the rule never
            selected."
+        } else {
+          "Name each column once."
+        }
       ),
       call = call
     )

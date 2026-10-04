@@ -47,7 +47,12 @@ ambiguous, so it stops.
 \item Key columns must have compatible types in both tables, as in
 \code{\link[=islh_join_denominator]{islh_join_denominator()}}. Missing key values match each other.
 \item Numeric columns match when they differ by no more than \code{tolerance}.
-Other columns must be identical as text, so a suppressed \code{"Suppressed"}
+With the default \code{tolerance = 0} they must be exactly equal: any
+difference at all is reported. With a positive tolerance, a difference
+that exceeds it only by floating-point error, such as \code{78.45 - 78.40}
+against \code{0.05}, counts as within it.
+\item Infinite values match only the same infinite value.
+\item Other columns must be identical as text, so a suppressed \code{"Suppressed"}
 in one table and \code{3} in the other is reported as different.
 \item Two missing values match. A missing value and a present one do not.
 }
