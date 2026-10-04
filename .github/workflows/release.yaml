@@ -52,25 +52,86 @@ jobs:
         if: matrix.config.artifact == 'zip'
         run: R CMD INSTALL --build islandepi_*.tar.gz
         shell: bash
+
+      # Record the exact dependency versions the Windows binary was built and
+      # checked with, so a staff deployment can reproduce them.
+      - name: Write the Windows dependency manifest
+        if: matrix.config.artifact == 'zip'
+        shell: Rscript {0}
+        run: |
+          version <- read.dcf("DESCRIPTION")[1, "Version"]
+          installed <- utils::installed.packages()
+          deps <- tools::package_dependencies(
+            "islandepi",
+            db = installed,
+            which = c("Depends", "Imports", "LinkingTo"),
+            recursive = TRUE
+          )[[1]]
+          base <- rownames(utils::installed.packages(priority = "base"))
+          deps <- sort(setdiff(deps, base))
+          manifest <- data.frame(
+            package = c("R", "islandepi", deps),
+            version = c(
+              paste(R.version$major, R.version$minor, sep = "."),
+              version,
+              installed[deps, "Version"]
+            )
+          )
+          utils::write.csv(
+            manifest,
+            sprintf("islandepi_%s_windows-dependencies.csv", version),
+            row.names = FALSE
+          )
+
+      # Install the binary the way staff do: the published installer, a new
+      # empty library, and CRAN binaries for the dependencies. The installer
+      # then loads the package and runs a small calculation.
+      - name: Clean install with the staff installer
+        if: matrix.config.artifact == 'zip'
+        shell: bash
+        run: |
+          clean="$RUNNER_TEMP/clean-library"
+          mkdir -p "$clean"
+          R_LIBS="" R_LIBS_SITE="" R_LIBS_USER="$clean" Rscript --vanilla -e '
+            source("inst/scripts/install-phase.R")
+            version <- read.dcf("DESCRIPTION")[1, "Version"]
+            install_phase_zip(
+              Sys.glob("islandepi_*.zip"),
+              package = "islandepi",
+              version = version,
+              lib = Sys.getenv("R_LIBS_USER")
+            )
+          '
       # Each runner uploads only its own kind of file, so the publish job never
       # receives two copies of the source package.
       - uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.config.artifact }}
-          path: '*.${{ matrix.config.artifact }}'
+          path: |
+            *.${{ matrix.config.artifact }}
+            *_windows-dependencies.csv
           if-no-files-found: error
 
   publish:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
       - uses: actions/download-artifact@v4
         with:
           pattern: package-*
           merge-multiple: true
+      # The installer is published on its own, because staff need it before
+      # the package is installed.
+      - name: Add the standalone installer
+        run: cp source/inst/scripts/install-phase.R install-phase.R
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             *.tar.gz
             *.zip
+            *_windows-dependencies.csv
+            install-phase.R
           fail_on_unmatched_files: true
