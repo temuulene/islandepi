@@ -62,15 +62,16 @@ jobs:
             pin("lubridate", "1.9.0")
             pin("tidyselect", "1.2.0")
           } else {
-            # surveillance 1.20.0 needs packages the current release does
-            # not. remotes cannot read its latin1 DESCRIPTION; base R honours
-            # its Encoding field.
+            # surveillance 1.20.1 is the oldest release that builds on R 4.4:
+            # 1.20.0 uses C symbols R 4.4 removed. It needs packages the
+            # current release does not. remotes cannot read its latin1
+            # DESCRIPTION; base R honours its Encoding field.
             install.packages(c(
               "sp", "xtable", "polyCub", "spatstat.geom",
               "Rcpp", "MASS", "Matrix", "nlme"
             ))
             install.packages(
-              "https://cran.r-project.org/src/contrib/Archive/surveillance/surveillance_1.20.0.tar.gz",
+              "https://cran.r-project.org/src/contrib/Archive/surveillance/surveillance_1.20.1.tar.gz",
               repos = NULL,
               type = "source"
             )
@@ -87,7 +88,7 @@ jobs:
               tidyselect = "1.2.0"
             )
           } else {
-            c(surveillance = "1.20.0", bcdata = "0.5.3")
+            c(surveillance = "1.20.1", bcdata = "0.5.3")
           }
           print(R.version.string)
           for (package in names(pins)) {

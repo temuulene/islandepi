@@ -39,7 +39,7 @@ Suggests:
     knitr,
     rmarkdown,
     sf (>= 1.0.0),
-    surveillance (>= 1.20.0),
+    surveillance (>= 1.20.1),
     testthat (>= 3.0.0),
     withr
 Config/testthat/edition: 3
