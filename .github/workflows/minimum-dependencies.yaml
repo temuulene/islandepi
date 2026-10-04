@@ -57,7 +57,13 @@ jobs:
           pin("lubridate", "1.9.0")
           pin("tidyselect", "1.2.0")
           if ("${{ matrix.config.deps }}" == "optional") {
-            pin("surveillance", "1.20.0")
+            # remotes cannot read surveillance 1.20.0's latin1 DESCRIPTION;
+            # base R honours its Encoding field.
+            install.packages(
+              "https://cran.r-project.org/src/contrib/Archive/surveillance/surveillance_1.20.0.tar.gz",
+              repos = NULL,
+              type = "source"
+            )
             pin("bcdata", "0.5.3")
           }
       - name: Show the versions tested

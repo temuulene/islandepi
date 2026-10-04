@@ -756,7 +756,13 @@ islh_bc_geography <- function(
     record_id = record_id,
     resource_id = resource_id,
     retrieved_at = Sys.time(),
-    bcdata_version = as.character(utils::packageVersion("bcdata")),
+    # Downloads require bcdata, so this is only missing when a test supplies
+    # the catalogue table directly.
+    bcdata_version = if (requireNamespace("bcdata", quietly = TRUE)) {
+      as.character(utils::packageVersion("bcdata"))
+    } else {
+      NA_character_
+    },
     content_md5 = hash,
     arguments = arguments
   )
