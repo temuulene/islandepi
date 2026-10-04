@@ -60,6 +60,124 @@ describes a real person.
 head(islh_outbreak[c("case_id", "age", "sex", "date_onset", "hsda", "lha_name")])
 ```
 
+## A complete rate workflow
+
+The sections after this one take each function on its own. This one runs the
+whole path from line list to a table you could release, so the decisions a
+rate depends on are visible in one place: what is counted, over which dates,
+against which denominator and standard, with which interval, and what leaves
+the team.
+
+The indicator is hospital admissions with the simulated winter virus, by
+health service delivery area (HSDA), for onsets from 3 November 2025 to
+8 March 2026, age-standardized to the 2011 Canadian population.
+
+```{r workflow-counts}
+hsdas <- c(
+  "South Vancouver Island",
+  "Central Vancouver Island",
+  "North Vancouver Island"
+)
+admitted_cases <- islh_outbreak[
+  !is.na(islh_outbreak$date_admission) &
+    islh_outbreak$date_onset >= as.Date("2025-11-03") &
+    islh_outbreak$date_onset <= as.Date("2026-03-08"),
+]
+admitted_cases$age_group <- islh_age_group(admitted_cases$age, breaks = "broad")
+
+# Count every area and age band, including any band with no admissions.
+# Both columns are factors, so table() keeps the empty combinations as zeros.
+admissions <- as.data.frame(
+  table(
+    hsda = factor(admitted_cases$hsda, levels = hsdas),
+    age_group = admitted_cases$age_group
+  ),
+  responseName = "cases",
+  stringsAsFactors = FALSE
+)
+admissions
+```
+
+A stratum with no admissions still belongs in a standardized rate. Dropping
+it would change the weights. Counting with factors, or with
+`islh_count_events()` and its `groups` argument, keeps it.
+
+The denominators below split BC Stats' 2025 HSDA totals across the three age
+bands in illustrative proportions. In a real analysis they come from
+`islh_bc_population()`, saved with its provenance: see the BC data article.
+The standard is the 2011 Canadian population in the same bands.
+
+```{r workflow-denominators}
+hsda_age_population <- data.frame(
+  hsda = rep(hsdas, each = 3),
+  age_group = rep(c("0-19", "20-64", "65+"), times = 3),
+  population = c(
+    83535, 269167, 111379,
+    57657, 172972, 89690,
+    30094, 81684, 31527
+  )
+)
+standard <- islh_standard_population("canada_2011", age_breaks = c(0, 20, 65))
+standard$age_group <- as.character(standard$age_group)
+```
+
+Each area's rate comes from `islh_dsr_joined()`, which lines the three tables
+up by key and stops if any of them is missing an age band:
+
+```{r workflow-rates}
+rates <- do.call(rbind, lapply(hsdas, function(area) {
+  rate <- islh_dsr_joined(
+    admissions[admissions$hsda == area, c("age_group", "cases")],
+    hsda_age_population[
+      hsda_age_population$hsda == area,
+      c("age_group", "population")
+    ],
+    standard,
+    by = "age_group",
+    standard_id = standard$standard_id[1]
+  )
+  data.frame(
+    hsda = area,
+    cases = rate$cases,
+    population = rate$population,
+    rate = round(rate$rate, 1),
+    lower = round(rate$lower, 1),
+    upper = round(rate$upper, 1)
+  )
+}))
+rates
+```
+
+```{r workflow-facts, include=FALSE}
+widest <- rates[which.max(rates$upper - rates$lower), ]
+```
+
+Every rate carries its 95% Fay-Feuer interval. With `r widest$cases`
+admissions, `r widest$hsda`'s interval runs from `r widest$lower` to
+`r widest$upper` per 100,000. Compare two areas with a ratio and its interval
+before saying one is higher, rather than by their order in the table. The
+[intervals article](intervals.html) explains why.
+
+Last, apply the release rule and make the copy that leaves the team. The
+threshold here is illustrative; use the approved rule for the release:
+
+```{r workflow-release}
+checked <- islh_suppress_table(
+  rates,
+  "cases",
+  threshold = 5,
+  linked = list(cases = c("rate", "lower", "upper"))
+)
+released <- islh_release_copy(
+  checked,
+  c("hsda", "cases", "rate", "lower", "upper")
+)
+released
+```
+
+`checked` is the working object, with its suppression audit for reviewers.
+`released` is the plain table to share.
+
 ## Group ages
 
 The result is an ordered factor, which preserves the correct order in tables
@@ -382,15 +500,28 @@ islh_suppression_audit(hidden)
 Keep the audit internal. It records no counts, but the reasons still say
 something about the hidden values: a cell marked `"small"` is known to be at or
 below the threshold. Publishing the audit, or a table that still carries it,
-narrows what a reader can infer. Save the audit with your working notes, then
-remove it from the object you release:
+narrows what a reader can infer.
+
+### Share a copy, not the working object
+
+A result from this package is a working object. Besides the columns you see, it
+can carry the suppression audit, the stratum counts behind a standardized rate
+and the calendar settings of a count table. A printed table or a CSV of chosen
+columns leaves those out, but an R object saved with `saveRDS()` keeps them.
+
+`islh_suppress_table()` already removes stratum detail, because stratum counts
+can reveal a hidden total. The audit stays, for your reviewers.
+`islh_release_copy()` makes the copy to share: only the columns you name, and
+none of the package's working information.
 
 ```{r release-copy}
 audit <- islh_suppression_audit(hidden)
-released <- hidden
-attr(released, "islh_suppression") <- NULL
+released <- islh_release_copy(hidden, c("authority", "area", "cases"))
+released
 names(attributes(released))
 ```
+
+Keep `hidden` and `audit` with your working notes, and share `released`.
 
 This helper works independently within each selected column. It does not prove
 that a multidimensional or linked release is protected. Use `linked` for

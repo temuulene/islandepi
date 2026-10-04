@@ -27,12 +27,13 @@ islandbrand::islh_setup(format = "plots", quiet = TRUE)
 ```
 
 A rate on its own looks exact. "89.5 per 100,000" reads as a precise fact, but
-it may rest on two cases or on two hundred. The confidence interval is the only
-part of the result that tells a reader which.
+it may rest on two cases or on two hundred. Showing the count helps. The
+confidence interval goes further: it shows how far the underlying rate could
+plausibly be from the one printed.
 
 This article works through five situations that come up in PHASE products. In
-each one, the point estimate alone points to a wrong conclusion and the
-interval corrects it. Every example is evaluated when the website is built,
+each one, the point estimate alone invites a wrong conclusion, and the
+interval guards against it. Every example is evaluated when the website is built,
 so the printed values are actual package output.
 
 ## Every case is counted. Why an interval?
@@ -42,11 +43,15 @@ sample. But the questions a report answers are about risk. Is the risk higher
 in this area than that one? Is it higher this year than last?
 
 The cases that occur in a year are one outcome of the underlying risk. With
-exactly the same risk, next year would bring a different count, in the same way
-that a fair coin does not land heads exactly half the time. The interval
-describes how far a count of this size moves by chance alone, and so how far
-the observed rate can sit from the underlying rate. This is the standard
+exactly the same risk, a different year would bring a different count, in the
+same way that a fair coin does not land heads exactly half the time. Treating
+the count as a Poisson count, the confidence interval gives the underlying
+rates that are compatible with what was observed. This is the standard
 approach for routine public health statistics (Eayres 2008).
+
+A confidence interval is about the underlying rate, not about next year's
+count. Predicting a future count also has to allow for that count's own
+chance variation, so a prediction interval is wider.
 
 ## 1. The same rate, very different certainty
 
@@ -88,8 +93,12 @@ to within about 12%. In Vancouver Island West it runs from
 add `r round(1 / two$population[2] * 1e5)` per 100,000 to the rate. Without the
 interval, a reader cannot tell these two numbers apart.
 
-The width of an interval depends almost entirely on the number of events, not
-on the size of the population:
+For a given confidence level and method, the relative width of a rate's
+interval, its width compared with the rate itself, depends almost entirely on
+the number of events. The population sets the scale: the same count in a
+smaller population gives a higher rate and an interval that is wider in rate
+units, but no wider relative to the rate. The table shows the relative width
+for different counts:
 
 ```{r width-by-count}
 events <- c(1, 2, 5, 10, 20, 50, 100, 500)
@@ -141,6 +150,21 @@ league
 top <- league[1, ]
 bottom <- league[nrow(league), ]
 covered <- sum(league$lower <= true_rate & league$upper >= true_rate)
+fold <- round(top$rate / bottom$rate)
+league_alt <- sprintf(
+  paste(
+    "Dot-and-whisker chart of crude rates per 100,000 for Island Health's 14",
+    "local health areas, sorted from highest to lowest, with a dashed vertical",
+    "line at the true rate of %s. %s has the highest rate, about %s, with an",
+    "interval from about %s to %s. %s has the lowest, about %s, with an",
+    "interval from about %s to %s. %s of the 14 intervals cross the dashed",
+    "line, and the intervals for the largest areas are the narrowest."
+  ),
+  true_rate,
+  top$lha, round(top$rate), round(top$lower), round(top$upper),
+  bottom$lha, round(bottom$rate), signif(bottom$lower, 1), round(bottom$upper),
+  covered
+)
 ```
 
 Sorted by rate, `r top$lha` comes first at `r top$rate` per 100,000, from
@@ -152,7 +176,7 @@ The intervals tell the real story. `r if (covered == nrow(league)) "All 14" else
 intervals contain the true rate of 50. The two areas at the extremes are among
 the smallest, and their intervals are among the widest.
 
-```{r league-plot, eval=has_plots, fig.height=5.5, fig.alt="Dot-and-whisker chart of crude rates per 100,000 for Island Health's 14 local health areas, sorted from highest to lowest, with a dashed vertical line at the true rate of 50. Vancouver Island West has the highest rate, about 134, with an interval from about 28 to 393. Cowichan Valley West has the lowest, about 14, with an interval from about 0.3 to 76. Every interval crosses the dashed line, and the intervals for the largest areas are the narrowest."}
+```{r league-plot, eval=has_plots, fig.height=5.5, fig.alt=league_alt}
 ranked <- league
 ranked$lha <- factor(ranked$lha, levels = rev(ranked$lha))
 
@@ -178,7 +202,11 @@ ggplot2::ggplot(ranked, ggplot2::aes(x = rate, y = lha)) +
   ggplot2::labs(
     x = "Cases per 100,000 (95% confidence interval)",
     y = NULL,
-    title = "Same underlying risk, a tenfold range of observed rates",
+    title = paste0(
+      "Same underlying risk, a ",
+      fold,
+      "-fold range of observed rates"
+    ),
     caption = "Simulated cases; populations from BC Stats 2025 estimates."
   )
 ```
@@ -193,6 +221,14 @@ An area outside the funnel deserves a closer look. An area inside it does not
 stand out from the rest, however high it sits in a ranked list. Draw two
 funnels: the 95% limits, which about 1 area in 20 crosses by chance, and the
 99.8% limits, which about 1 in 500 crosses (Spiegelhalter 2005).
+
+This demonstration builds in the funnel's assumptions: every area shares one
+underlying rate, and counts vary as Poisson counts do. Real comparisons need
+more care. Areas differ in age structure, so compare standardized rates; real
+counts often vary more than Poisson counts (overdispersion), which widens the
+funnel; and the overall rate is itself an estimate. Being outside the funnel
+warrants review. It does not establish poor performance, and it does not
+explain why.
 
 Poisson counts are whole numbers, so funnel limits read straight from
 `stats::qpois()` jump in steps. Spiegelhalter (2005) interpolates between the
@@ -224,7 +260,24 @@ inside <- league$rate >= stats::approx(
 sum(inside)
 ```
 
-```{r funnel-plot, eval=has_plots, fig.alt="Funnel plot of crude rate per 100,000 against population on a log scale for the 14 local health areas. A solid horizontal line marks the overall rate of about 50. Dashed 95% and dotted 99.8% limits form a smooth funnel that is wide for small populations and narrows as population grows. All 14 areas fall inside the 95% funnel, including the two labelled extremes, Vancouver Island West at about 134 and Cowichan Valley West at about 14."}
+```{r funnel-facts, include=FALSE}
+# The plot title and description claim every area is inside the funnel.
+stopifnot(all(inside))
+funnel_alt <- sprintf(
+  paste(
+    "Funnel plot of crude rate per 100,000 against population on a log scale",
+    "for the 14 local health areas. A solid horizontal line marks the overall",
+    "rate of about %s. Dashed 95%% and dotted 99.8%% limits form a smooth",
+    "funnel that is wide for small populations and narrows as population",
+    "grows. All 14 areas fall inside the 95%% funnel, including the two",
+    "labelled extremes, %s at about %s and %s at about %s."
+  ),
+  round(overall),
+  top$lha, round(top$rate), bottom$lha, round(bottom$rate)
+)
+```
+
+```{r funnel-plot, eval=has_plots, fig.alt=funnel_alt}
 limit_colour <- islandbrand::islh_hex("grey", 45)
 extremes <- league[c(1, nrow(league)), ]
 
@@ -303,15 +356,15 @@ round(c(
 ), 2)
 ```
 
-The ratio is `r round(change$estimate, 2)`, but its interval runs from
+Reported cases did rise, from 14 to 22, and a report can say so. The question
+the interval answers is different: did the underlying risk rise? The ratio is
+`r round(change$estimate, 2)`, but its interval runs from
 `r round(change$conf.int[1], 2)` to `r round(change$conf.int[2], 2)`. The data
-are consistent with anything from a fall of about a quarter to more than a
-tripling. Counts of 14 and 22 sit well within the range chance produces from
-one year to the next.
+are compatible with anything from an underlying rate about a quarter lower to
+one more than three times higher.
 
-That does not mean nothing changed. It means these data cannot tell. Report the
-counts, the ratio and its interval, and avoid "rise" or "increase" as a
-finding.
+Report the counts, the ratio and its interval. Describe the rise in cases as a
+rise in cases, and do not present it as evidence that the risk changed.
 
 ### Overlapping intervals can still hide a real change
 
@@ -343,15 +396,20 @@ round(c(
 
 The two intervals overlap: 2024's runs up to `r round(nanaimo_rates$upper[1])`
 and 2025's starts at `r round(nanaimo_rates$lower[2])`. It is tempting to read
-that overlap as "no real change", and it would be wrong. The interval for the
+that overlap as "no change", and it would be wrong. The interval for the
 ratio, `r round(change$conf.int[1], 2)` to `r round(change$conf.int[2], 2)`,
-excludes 1.
+excludes 1: under the Poisson model, these counts are not compatible with an
+unchanged underlying rate.
+
+That is evidence the rate changed, not of why. A change in testing, coding or
+case definitions would produce the same pattern.
 
 Two 95% intervals can overlap even when the difference between the estimates is
 clear (Schenker and Gentleman 2001). Compare two estimates with the interval
 for their ratio or difference, not by checking whether their intervals touch.
-The reverse does hold: when two 95% intervals do not overlap at all, the
-difference is clear at an even stricter level than 5%.
+For two independent estimates like these, the reverse does hold: when their
+95% intervals do not overlap at all, the difference is clear at an even
+stricter level than 5%.
 
 ## 4. Percentages and targets
 
@@ -377,12 +435,17 @@ Both teams reached 90%. The large team's interval is under 3 points wide, so
 its performance is known closely. The small team's runs from
 `r round(share$lower[1])` to `r round(share$upper[1])`.
 
-The next quarter, the small team reaches 19 of 20, or 95%. A report might say
-the team now "exceeds the target". The interval, `r round(share$lower[3])` to
-`r round(share$upper[3])`, says the data are consistent with performance well
-below 90%. One more or one fewer case reached moves the result by 5 points.
-Before saying a result meets or misses a target, check where the interval
-sits, not just the estimate.
+The next quarter, the small team reaches 19 of 20, or 95%. As a description
+of that quarter, the result exceeded the 90% target, and a report can say so.
+
+Whether the team's ongoing performance now exceeds 90% is a different
+question. The interval, `r round(share$lower[3])` to `r round(share$upper[3])`,
+is compatible with an underlying rate well below 90%, so these data do not
+establish it. One more or one fewer case reached moves the result by 5 points.
+
+Decide in the reporting policy which of the two statements a target is about.
+When it is about ongoing performance, check where the interval sits, not just
+the estimate.
 
 ## 5. Putting intervals in products
 
@@ -436,14 +499,14 @@ State the estimate with its interval at first mention:
 For a comparison, report the ratio or difference, its interval and the counts
 behind it:
 
-> Comox Valley reported 22 cases in 2025 and 14 in 2024. The rate ratio was
-> 1.57 (95% CI 0.77 to 3.32), so these data cannot show whether the rate rose
-> or fell.
+> Comox Valley reported 22 cases in 2025, up from 14 in 2024. The rate ratio
+> was 1.57 (95% CI 0.77 to 3.32), so these data cannot show whether the
+> underlying rate rose or fell.
 
 For audiences outside epidemiology, one sentence is enough:
 
-> The range in brackets shows how much the rate could vary by chance, given
-> the number of cases it is based on. A wide range means the rate is uncertain.
+> The range in brackets shows the underlying rates that are consistent with
+> the number of cases observed. A wide range means the rate is uncertain.
 
 Avoid saying there is a 95% probability that the true rate lies in the
 interval. That is not what a confidence interval means, and the plain-language
@@ -482,8 +545,9 @@ to assume the interval covers them.
   eye and not by whether their intervals overlap.
 - Do not rank small areas by their point estimates. Use a funnel plot, or sort
   by name or geography and show the intervals.
-- Before saying a result meets, exceeds or misses a target, check where the
-  interval sits.
+- Before saying a result meets, exceeds or misses a target, be clear whether
+  the statement is about the period observed or about ongoing performance.
+  For ongoing performance, check where the interval sits.
 - Name the interval method and confidence level in the notes.
 - When an interval is too wide to support any conclusion, say so. Consider
   combining years or areas, applied the same way to every estimate being

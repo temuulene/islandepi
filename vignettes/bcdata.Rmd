@@ -38,13 +38,26 @@ Areas. It reshapes one-year ages into the same age bands used by
 `islh_age_group()`.
 
 ```{r download-population, eval=FALSE}
+island_lha_codes <- c(
+  "411", "412", "413", "414", "421", "422", "423", "424", "425", "426",
+  "431", "432", "433", "434"
+)
+
 lha_population <- islh_bc_population(
   geography = "lha",
-  years = 2021:2026,
+  years = 2021:2025,
   sex = c("F", "M"),
-  age_breaks = "five_year"
+  age_breaks = "five_year",
+  estimate_type = "Estimate",
+  expected_codes = island_lha_codes
 )
 ```
+
+`expected_codes` comes from your own roster, not from the download. If BC
+Stats renames, merges or drops a local health area, the request stops and
+names the missing code, rather than letting a later join quietly lose the
+area. The resource holds estimates up to the latest year and projections after
+it; `estimate_type` says which you mean.
 
 Female and male rows are returned separately. Summing them produces a total
 without double counting. Alternatively, request `sex = "T"` on its own when
@@ -200,10 +213,32 @@ must travel with an analytical extract.
 ## Reproducible extracts
 
 The package retrieves current catalogue content and deliberately does not ship
-copied datasets. For a governed analysis, save the retrieved object in the
-project with its retrieval date and source metadata. Re-run the retrieval only
-when the analysis protocol permits the denominator or geography version to
-change.
+copied datasets. The pinned record and resource identifiers say where the data
+came from, but not which version: BC Stats revises estimates, and a later
+download of the same resource can differ. For a governed analysis, save the
+retrieved object in the project with its retrieval date and source metadata,
+and read the saved copy from then on:
+
+```{r save-extract, eval=FALSE}
+extract <- list(
+  population = lha_population,
+  source = attr(lha_population, "bcdata_source"),
+  retrieved = Sys.Date()
+)
+saveRDS(extract, "data/lha-population-2025-estimates.rds")
+
+# Later, and in every re-run of the report:
+extract <- readRDS("data/lha-population-2025-estimates.rds")
+lha_population <- extract$population
+```
+
+Re-run the retrieval only when the analysis protocol permits the denominator
+or geography version to change.
+
+Geography codes alone do not make two periods comparable. Local health area
+boundaries are redrawn from time to time, and a code can describe a different
+area after a redraw. A historical numerator and a current boundary file need
+the same geography vintage, or a documented crosswalk between them.
 
 If a request fails on a health-authority network, verify that
 `catalogue.data.gov.bc.ca` is reachable through the configured proxy. The

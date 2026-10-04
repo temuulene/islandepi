@@ -20,15 +20,16 @@ For event-level reporting, see the evaluated
 
 ## Installing
 
-For staff, use a checked Windows binary from the team's approved release,
-with its dependencies preinstalled in a writable user library. Run installation
-outside a report render. See [the supported installation guide](inst/INSTALL.md)
-and `inst/scripts/install-phase.R` for the base-R bootstrap.
+For staff, follow [the supported installation guide](inst/INSTALL.md). Each
+release on GitHub Releases publishes the Windows ZIP, the standalone installer
+`install-phase.R` and a manifest of the dependency versions it was built with.
+Run installation outside a report render.
 
-Release assets are created only after release checks pass. A version number in
-DESCRIPTION does not mean its ZIP has been published. Download the exact
-approved ZIP from GitHub Releases or obtain it from the team lead; the installer
-checks the package name and version against your requested version.
+Release assets are created only after release checks pass and the Windows ZIP
+has been test-installed into an empty library. A version number in DESCRIPTION
+does not mean its ZIP has been published. The installer checks the package
+name and version against your requested version, then loads the package and
+runs a check calculation.
 
 Developers can install a reviewed commit using `remotes::install_github()` with
 an explicit `ref`. Record both package versions and `sessionInfo()` with every
@@ -158,3 +159,9 @@ requires it.
 
 Use [`islandbrand`](https://github.com/temuulene/islandbrand) for Island Health
 figures, tables and Quarto reports. The packages can be loaded together.
+
+## Licence
+
+`islandepi` is public so staff can install it without a GitHub account, but it
+is licensed for Island Health work: employees, contractors and partners may
+use, copy, modify and distribute it for that purpose. See [LICENSE](LICENSE).

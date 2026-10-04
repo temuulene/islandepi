@@ -59,6 +59,19 @@ beyond `dplyr`, `tidyr`, `tidyselect` and `lubridate`.
   factors.
 - **Never drop data silently.** When a function leaves out records by design,
   such as partial periods, it says so with `.islh_inform()`.
+- **Keys are values, not strings.** Group, join and match on key columns with
+  the helpers in `R/keys.R`, which keep a missing value apart from the text
+  `"NA"` and cannot be confused by a separator inside a value. Paste key
+  values together only for messages.
+- **Results are working objects.** Package results can carry attributes such
+  as the suppression audit or the stratum detail behind a standardized rate.
+  Anything that withholds values must also remove detail that would reveal
+  them, as `islh_suppress_table()` does, and sharing goes through
+  `islh_release_copy()`.
+- **A row's date is not its duration.** Never infer what one row covers from
+  the spacing of its dates beyond consecutive days; ask for the period, or
+  read it from metadata. Refuse partial periods in anything that treats a row
+  as a whole period.
 - **Surveillance results carry calendar metadata.** Baselines and snapshots
   read it to refuse comparisons of different durations. Keep it on any new
   result that feeds them.
