@@ -17,6 +17,18 @@
 #' smaller one, and a message says how many comparisons were affected. Supply
 #' complete counts, including zeros, from [islh_count_events()].
 #'
+#' @section Intervals:
+#'
+#' `ratio_lower` and `ratio_upper` are exact limits for the ratio of the two
+#' windows' expected counts, as [islh_rate_ratio()] gives them: they treat each
+#' count as Poisson and the two as independent. They describe a change in
+#' rate only when both windows cover the same population and the same number
+#' of periods; check `current_periods` and `reference_periods`. Counts that
+#' cluster, as outbreaks do, vary more than Poisson counts, so read the limits
+#' as a lower bound on the uncertainty. With small counts, lead with the
+#' counts themselves: 4 cases against 11 is a clearer statement than a 64%
+#' fall.
+#'
 #' @section Same period a year earlier:
 #'
 #' The reference is the same period one year earlier, found as in
@@ -44,33 +56,38 @@
 #'   when `interval` is `"week"` and there is no metadata.
 #' @param timezone Reporting timezone for timestamps. Date values are
 #'   unchanged.
+#' @param conf Confidence level of the ratio's limits.
 #'
 #' @return A data frame with one row per group and comparison: the grouping
 #'   columns, `comparison`, `current_from`, `current_to`, `reference_from`,
 #'   `reference_to`, `current_periods`, `reference_periods`, `current`,
-#'   `reference`, `difference`, `ratio` and `percent_change`.
+#'   `reference`, `difference`, `ratio`, `ratio_lower`, `ratio_upper` and
+#'   `percent_change`.
 #' @export
 #'
 #' @examples
-#' weekly <- islh_count_events(
-#'   islh_outbreak,
-#'   date = date_onset,
-#'   id = case_id,
-#'   by = hsda,
-#'   interval = "week",
-#'   from = "2025-11-03",
-#'   to = "2026-03-08"
-#' )
+#' library(dplyr)
 #'
-#' islh_compare_periods(
-#'   weekly,
-#'   date = period_start,
-#'   value = count,
-#'   by = hsda,
-#'   current = "2026-01-26",
-#'   comparison = c("previous_period", "season_to_date"),
-#'   season_start = "2025-11-03"
-#' )
+#' weekly <- islh_outbreak |>
+#'   islh_count_events(
+#'     date = date_onset,
+#'     id = case_id,
+#'     by = hsda,
+#'     interval = "week",
+#'     from = "2025-11-03",
+#'     to = "2026-03-08"
+#'   )
+#'
+#' weekly |>
+#'   islh_compare_periods(
+#'     date = period_start,
+#'     value = count,
+#'     by = hsda,
+#'     current = "2026-01-19",
+#'     comparison = c("previous_period", "season_to_date"),
+#'     season_start = "2025-11-03"
+#'   ) |>
+#'   select(hsda, comparison, current, reference, ratio, ratio_lower, ratio_upper)
 islh_compare_periods <- function(
   data,
   date,
@@ -81,8 +98,10 @@ islh_compare_periods <- function(
   season_start = NULL,
   interval = NULL,
   week_start = 1,
-  timezone = "America/Vancouver"
+  timezone = "America/Vancouver",
+  conf = 0.95
 ) {
+  conf <- .islh_check_conf(conf)
   if (!is.data.frame(data)) {
     .islh_abort("{.arg data} must be a data frame.")
   }
@@ -113,6 +132,8 @@ islh_compare_periods <- function(
     "reference",
     "difference",
     "ratio",
+    "ratio_lower",
+    "ratio_upper",
     "percent_change"
   )
   .islh_surv_check_reserved(by_names, output_columns)
@@ -282,6 +303,13 @@ islh_compare_periods <- function(
   out$difference <- out$current - out$reference
   usable <- !is.na(out$reference) & out$reference > 0
   out$ratio <- ifelse(usable, out$current / out$reference, NA_real_)
+  limits <- .islh_poisson_ratio_limits(
+    ifelse(usable, out$current, 0),
+    ifelse(usable, out$reference, 0),
+    conf = conf
+  )
+  out$ratio_lower <- limits$lower
+  out$ratio_upper <- limits$upper
   out$percent_change <- (out$ratio - 1) * 100
 
   missing <- sum(is.na(out$current) | is.na(out$reference))

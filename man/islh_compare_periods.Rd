@@ -14,7 +14,8 @@ islh_compare_periods(
   season_start = NULL,
   interval = NULL,
   week_start = 1,
-  timezone = "America/Vancouver"
+  timezone = "America/Vancouver",
+  conf = 0.95
 )
 }
 \arguments{
@@ -45,12 +46,15 @@ when \code{interval} is \code{"week"} and there is no metadata.}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
 unchanged.}
+
+\item{conf}{Confidence level of the ratio's limits.}
 }
 \value{
 A data frame with one row per group and comparison: the grouping
 columns, \code{comparison}, \code{current_from}, \code{current_to}, \code{reference_from},
 \code{reference_to}, \code{current_periods}, \code{reference_periods}, \code{current},
-\code{reference}, \code{difference}, \code{ratio} and \code{percent_change}.
+\code{reference}, \code{difference}, \code{ratio}, \code{ratio_lower}, \code{ratio_upper} and
+\code{percent_change}.
 }
 \description{
 \code{islh_compare_periods()} puts the current period's count beside a named
@@ -72,6 +76,20 @@ smaller one, and a message says how many comparisons were affected. Supply
 complete counts, including zeros, from \code{\link[=islh_count_events]{islh_count_events()}}.
 }
 
+\section{Intervals}{
+
+
+\code{ratio_lower} and \code{ratio_upper} are exact limits for the ratio of the two
+windows' expected counts, as \code{\link[=islh_rate_ratio]{islh_rate_ratio()}} gives them: they treat each
+count as Poisson and the two as independent. They describe a change in
+rate only when both windows cover the same population and the same number
+of periods; check \code{current_periods} and \code{reference_periods}. Counts that
+cluster, as outbreaks do, vary more than Poisson counts, so read the limits
+as a lower bound on the uncertainty. With small counts, lead with the
+counts themselves: 4 cases against 11 is a clearer statement than a 64\%
+fall.
+}
+
 \section{Same period a year earlier}{
 
 
@@ -84,23 +102,26 @@ the \code{current_periods} and \code{reference_periods} columns show when they d
 }
 
 \examples{
-weekly <- islh_count_events(
-  islh_outbreak,
-  date = date_onset,
-  id = case_id,
-  by = hsda,
-  interval = "week",
-  from = "2025-11-03",
-  to = "2026-03-08"
-)
+library(dplyr)
 
-islh_compare_periods(
-  weekly,
-  date = period_start,
-  value = count,
-  by = hsda,
-  current = "2026-01-26",
-  comparison = c("previous_period", "season_to_date"),
-  season_start = "2025-11-03"
-)
+weekly <- islh_outbreak |>
+  islh_count_events(
+    date = date_onset,
+    id = case_id,
+    by = hsda,
+    interval = "week",
+    from = "2025-11-03",
+    to = "2026-03-08"
+  )
+
+weekly |>
+  islh_compare_periods(
+    date = period_start,
+    value = count,
+    by = hsda,
+    current = "2026-01-19",
+    comparison = c("previous_period", "season_to_date"),
+    season_start = "2025-11-03"
+  ) |>
+  select(hsda, comparison, current, reference, ratio, ratio_lower, ratio_upper)
 }

@@ -37,6 +37,43 @@ test_that("zero references give a difference but no ratio", {
   expect_equal(b$difference, c(0, 0))
   expect_true(all(is.na(b$ratio)))
   expect_true(all(is.na(b$percent_change)))
+  expect_true(all(is.na(b$ratio_lower) & is.na(b$ratio_upper)))
+})
+
+test_that("the ratio comes with exact Poisson limits", {
+  out <- islh_compare_periods(
+    weekly_counts(),
+    week,
+    n,
+    by = site,
+    current = "2026-01-05",
+    interval = "week"
+  )
+  a <- out[out$site == "A", ]
+  for (i in seq_len(nrow(a))) {
+    test <- stats::poisson.test(c(a$current[i], a$reference[i]))
+    expect_equal(
+      c(a$ratio_lower[i], a$ratio_upper[i]),
+      as.numeric(test$conf.int)
+    )
+  }
+
+  wider <- islh_compare_periods(
+    weekly_counts(),
+    week,
+    n,
+    by = site,
+    current = "2026-01-05",
+    interval = "week",
+    conf = 0.99
+  )
+  wider <- wider[wider$site == "A", ]
+  expect_true(all(wider$ratio_lower < a$ratio_lower))
+  expect_true(all(wider$ratio_upper > a$ratio_upper))
+  expect_error(
+    islh_compare_periods(weekly_counts(), week, n, interval = "week", conf = 2),
+    "between 0 and 1"
+  )
 })
 
 test_that("season to date sums both windows", {

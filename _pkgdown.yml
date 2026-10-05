@@ -36,14 +36,16 @@ articles:
 reference:
   - title: Example data
     desc: >
-      Simulated data for the examples and articles: an outbreak line list,
-      seven seasons of weekly counts, encounters with repeat visitors and a
-      feed log with a missing file.
+      Data for the examples and articles: a simulated outbreak line list,
+      seven seasons of simulated weekly counts, encounters with repeat
+      visitors and a feed log with a missing file, and BC Stats' 2025
+      population of each local health area by age and sex.
     contents:
       - islh_outbreak
       - islh_seasons
       - islh_encounters
       - islh_feed_log
+      - islh_lha_population
 
   - title: Routine surveillance
     desc: >
@@ -83,15 +85,18 @@ reference:
     desc: >
       Group ages, attach denominators with checked keys, and calculate crude
       or directly standardized rates and proportions with explicit interval
-      methods and validated inputs.
+      methods and validated inputs. Compare two rates with the ratio method
+      that matches them: crude or standardized.
     contents:
       - islh_age_group
       - islh_join_denominator
       - islh_crude_rate
+      - islh_rate_ratio
       - islh_proportion
       - islh_dsr_joined
       - islh_dsr
       - islh_dsr_detail
+      - islh_dsr_ratio
       - islh_standard_population
       - islh_ci_poisson
 
