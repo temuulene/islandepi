@@ -158,10 +158,12 @@ islh_reporting_delay <- function(
 #' small groups. `delay_records` gives the number of records each estimate
 #' rests on; set `pool = TRUE` to learn one profile from all groups.
 #'
-#' This is not a nowcast. It does not model trends in the delays or in the
-#' epidemic curve, and it gives no interval. When the final count itself
-#' matters, use a nowcasting method that adjusts for right truncation
-#' (Charniga et al. 2024).
+#' `expected_complete` is an empirical estimate from a limited number of
+#' records, not a known fraction, and it carries the uncertainty of the
+#' delays it was learned from. This is not a nowcast. It does not model
+#' trends in the delays or in the epidemic curve, and it gives no interval.
+#' When the final count itself matters, use a nowcasting method that adjusts
+#' for right truncation (Charniga et al. 2024).
 #'
 #' @inheritParams islh_reporting_delay
 #' @param as_of Reporting cutoff: the date the data stood at. Required.
@@ -185,7 +187,8 @@ islh_reporting_delay <- function(
 #' @references
 #' Charniga K, Park SW, Akhmetzhanov AR, et al. (2024). Best practices for
 #' estimating and reporting epidemiological delay distributions of
-#' infectious diseases. arXiv:2405.08841.
+#' infectious diseases. *PLOS Computational Biology* 20(10):e1012520.
+#' \doi{10.1371/journal.pcbi.1012520}
 #'
 #' @examples
 #' # How complete were the counts by onset date on 20 January? Records are
@@ -198,7 +201,8 @@ islh_reporting_delay <- function(
 #'   max_delay = 10,
 #'   maturity = 21
 #' )
-#' tail(completeness)
+#' completeness |>
+#'   dplyr::slice_tail(n = 6)
 islh_reporting_completeness <- function(
   data,
   onset,

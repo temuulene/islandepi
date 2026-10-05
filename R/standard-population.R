@@ -2,9 +2,11 @@
 #
 # Values are the 19-age-group tables published by the SEER Program, retrieved
 # 2026-09-30 from https://seer.cancer.gov/stdpopulations/stdpop.19ages.html.
-# Every column sums exactly to the total SEER prints, and the Canadian 2011
-# total matches Statistics Canada's age-standardization page. See
-# data-raw/standard-populations.md before adding a standard.
+# SEER is where the digits were copied from, not the primary source: the
+# Canadian standards are Statistics Canada's July 1 population estimates for
+# 2011 and 2021. Every column sums exactly to the total SEER prints, and the
+# Canadian 2011 total matches Statistics Canada's age-standardization page.
+# See data-raw/standard-populations.md before adding a standard.
 
 # Lower bounds of the published bands: under 1, 1-4, five-year bands, 85+.
 .islh_standard_bounds <- c(0, 1, seq(5, 85, by = 5))
@@ -187,8 +189,14 @@
 #' @export
 #'
 #' @references
-#' Statistics Canada. Age-standardized rates.
-#' <https://www.statcan.gc.ca/en/dai/btd/asr>
+#' Ellison LF (2016). Updating the standard population and its effect on
+#' cancer incidence and mortality rates. *Health at a Glance*, Statistics
+#' Canada catalogue no. 82-624-X. Describes the move from the 1991 to the
+#' 2011 Canadian standard in 2016.
+#'
+#' Statistics Canada. Population estimates on July 1, by age and gender. The
+#' source of the `canada_2011` and `canada_2021` standards, whose digits were
+#' copied from the SEER tables below.
 #'
 #' Ahmad OB, Boschi-Pinto C, Lopez AD, Murray CJL, Lozano R, Inoue M (2001).
 #' *Age standardization of rates: a new WHO standard*. GPE Discussion Paper
@@ -198,24 +206,27 @@
 #' for age-adjustment. <https://seer.cancer.gov/stdpopulations/>
 #'
 #' @examples
+#' library(dplyr)
+#'
 #' standard <- islh_standard_population("canada_2011")
-#' head(standard)
-#' sum(standard$weight)
+#' standard |>
+#'   slice_head(n = 6)
+#' standard |>
+#'   summarise(weight = sum(weight))
 #'
 #' # Broad bands for a small area.
 #' islh_standard_population("canada_2011", age_breaks = c(0, 20, 65))
 #'
 #' # Use it directly with keyed standardization.
-#' cases <- data.frame(
+#' cases <- tibble(
 #'   age_group = c("0-19", "20-64", "65+"),
 #'   cases = c(4, 22, 31)
 #' )
-#' population <- data.frame(
+#' population <- tibble(
 #'   age_group = c("0-19", "20-64", "65+"),
 #'   population = c(18000, 51000, 23000)
 #' )
 #' standard <- islh_standard_population("canada_2011", c(0, 20, 65))
-#' standard$age_group <- as.character(standard$age_group)
 #'
 #' islh_dsr_joined(
 #'   cases,

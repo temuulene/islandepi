@@ -153,7 +153,7 @@ columns you name and none of the package's working information.
 }
 
 \examples{
-counts <- data.frame(
+counts <- dplyr::tibble(
   area = c("North", "Central", "South"),
   cases = c(3, 42, 17),
   contacts = c(1, 55, 4)
@@ -171,7 +171,7 @@ islh_suppress_table(
 
 # A subtotalled table is protected within each subtotal, not across the
 # whole column.
-by_authority <- data.frame(
+by_authority <- dplyr::tibble(
   authority = c("Island", "Island", "Interior", "Interior"),
   area = c("North", "South", "East", "West"),
   cases = c(2, 30, 4, 25)
@@ -184,7 +184,7 @@ hidden <- islh_suppress_table(
 islh_suppression_audit(hidden)
 
 # Hide the rate wherever its count is hidden.
-rates <- data.frame(
+rates <- dplyr::tibble(
   area = c("North", "Central", "South"),
   cases = c(3, 42, 17),
   rate = c(12.5, 88.1, 40.2)

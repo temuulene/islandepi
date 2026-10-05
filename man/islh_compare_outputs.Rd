@@ -61,12 +61,14 @@ Columns that only one table has are not compared, and a message names them.
 }
 
 \examples{
-r_output <- data.frame(
+library(dplyr)
+
+r_output <- tibble(
   hsda = c("South", "Central", "North"),
   cases = c(412, 251, 127),
   rate = c(88.8, 78.4, 88.6)
 )
-dashboard <- data.frame(
+dashboard <- tibble(
   hsda = c("South", "Central", "North Island"),
   cases = c(412, 250, 127),
   rate = c(88.8, 78.0, 88.6)

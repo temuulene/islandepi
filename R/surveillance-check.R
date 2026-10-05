@@ -61,11 +61,15 @@
 #' )
 #'
 #' # Damage a few records to see what the review looks like.
-#' damaged <- islh_outbreak[1:6, ]
-#' damaged$case_id[2] <- damaged$case_id[1]
-#' damaged$date_onset[3] <- NA
-#' damaged$hsda[4] <- ""
-#' damaged$date_onset[5] <- as.Date("2027-01-01")
+#' library(dplyr)
+#'
+#' damaged <- islh_outbreak |>
+#'   slice_head(n = 6) |>
+#'   mutate(
+#'     case_id = replace(case_id, 2, case_id[1]),
+#'     date_onset = replace(date_onset, c(3, 5), as.Date(c(NA, "2027-01-01"))),
+#'     hsda = replace(hsda, 4, "")
+#'   )
 #'
 #' islh_check_events(
 #'   damaged,
@@ -76,8 +80,11 @@
 #' )
 #'
 #' # Check coded values and the order of two dates.
-#' damaged$sex[6] <- "F"
-#' damaged$date_reported[1] <- damaged$date_onset[1] - 3
+#' damaged <- damaged |>
+#'   mutate(
+#'     sex = replace(sex, 6, "F"),
+#'     date_reported = replace(date_reported, 1, date_onset[1] - 3)
+#'   )
 #'
 #' islh_check_events(
 #'   damaged,

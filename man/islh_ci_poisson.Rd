@@ -54,4 +54,7 @@ islh_ci_poisson(3, method = "byar")
 \references{
 Breslow NE, Day NE (1987). \emph{Statistical Methods in Cancer Research,
 Volume II}. IARC Scientific Publications No. 82, section 2.3.
+
+Garwood F (1936). Fiducial limits for the Poisson distribution.
+\emph{Biometrika} 28(3-4):437-442.
 }

@@ -55,24 +55,27 @@ cannot become 85 to 89 and 90 and over.
 }
 
 \examples{
+library(dplyr)
+
 standard <- islh_standard_population("canada_2011")
-head(standard)
-sum(standard$weight)
+standard |>
+  slice_head(n = 6)
+standard |>
+  summarise(weight = sum(weight))
 
 # Broad bands for a small area.
 islh_standard_population("canada_2011", age_breaks = c(0, 20, 65))
 
 # Use it directly with keyed standardization.
-cases <- data.frame(
+cases <- tibble(
   age_group = c("0-19", "20-64", "65+"),
   cases = c(4, 22, 31)
 )
-population <- data.frame(
+population <- tibble(
   age_group = c("0-19", "20-64", "65+"),
   population = c(18000, 51000, 23000)
 )
 standard <- islh_standard_population("canada_2011", c(0, 20, 65))
-standard$age_group <- as.character(standard$age_group)
 
 islh_dsr_joined(
   cases,
@@ -83,8 +86,14 @@ islh_dsr_joined(
 )
 }
 \references{
-Statistics Canada. Age-standardized rates.
-\url{https://www.statcan.gc.ca/en/dai/btd/asr}
+Ellison LF (2016). Updating the standard population and its effect on
+cancer incidence and mortality rates. \emph{Health at a Glance}, Statistics
+Canada catalogue no. 82-624-X. Describes the move from the 1991 to the
+2011 Canadian standard in 2016.
+
+Statistics Canada. Population estimates on July 1, by age and gender. The
+source of the \code{canada_2011} and \code{canada_2021} standards, whose digits were
+copied from the SEER tables below.
 
 Ahmad OB, Boschi-Pinto C, Lopez AD, Murray CJL, Lozano R, Inoue M (2001).
 \emph{Age standardization of rates: a new WHO standard}. GPE Discussion Paper

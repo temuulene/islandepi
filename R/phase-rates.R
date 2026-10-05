@@ -47,6 +47,9 @@
 #' Breslow NE, Day NE (1987). *Statistical Methods in Cancer Research,
 #' Volume II*. IARC Scientific Publications No. 82, section 2.3.
 #'
+#' Garwood F (1936). Fiducial limits for the Poisson distribution.
+#' *Biometrika* 28(3-4):437-442.
+#'
 #' @examples
 #' islh_ci_poisson(c(0, 3, 25, 100))
 #'
@@ -187,6 +190,16 @@ islh_crude_rate <- function(
 #' exact Poisson interval on the pooled count. A regression test checks that
 #' property across several strata.
 #'
+#' It is conservative by design: its coverage is usually above the nominal
+#' level, more so when one small stratum has a large weight. Other tools use
+#' other methods. The Fingertips profiles and the APHO and OHID calculators
+#' use Dobson's method (Eayres 2008), so their intervals will not match these
+#' exactly. Tiwari, Clegg and Zou's modified gamma interval and Fay and Kim's
+#' mid-p gamma interval come closer to nominal coverage; neither is provided.
+#'
+#' To compare two standardized rates, use [islh_dsr_ratio()]. Comparing their
+#' total cases and populations compares the crude rates instead.
+#'
 #' @section Zero denominators:
 #'
 #' A stratum with a zero denominator is refused, for the reason given in the
@@ -228,6 +241,17 @@ islh_crude_rate <- function(
 #' rates: a method based on the gamma distribution.
 #' *Statistics in Medicine* 16(7):791-801.
 #'
+#' Eayres D (2008). *Technical Briefing 3: Commonly used public health
+#' statistics and their confidence intervals*. Association of Public Health
+#' Observatories.
+#'
+#' Tiwari RC, Clegg LX, Zou Z (2006). Efficient interval estimation for
+#' age-adjusted cancer rates. *Statistical Methods in Medical Research*
+#' 15(6):547-569.
+#'
+#' Fay MP, Kim S (2017). Confidence intervals for directly standardized rates
+#' using mid-p gamma intervals. *Biometrical Journal* 59(2):377-387.
+#'
 #' @examples
 #' cases <- c(5, 12, 40, 80)
 #' population <- c(20000, 25000, 22000, 15000)
@@ -238,6 +262,24 @@ islh_crude_rate <- function(
 #' # Compare with the crude rate: standardizing removes the effect of this
 #' # population being older than the standard.
 #' islh_crude_rate(sum(cases), sum(population))
+#'
+#' # One standardized rate per area, from a table with a row for each area
+#' # and age group.
+#' library(dplyr)
+#'
+#' strata <- tibble(
+#'   area = rep(c("North", "South"), each = 4),
+#'   cases = c(5, 12, 40, 80, 9, 31, 52, 70),
+#'   population = c(20000, 25000, 22000, 15000, 41000, 52000, 38000, 21000),
+#'   standard = rep(c(30000, 30000, 25000, 15000), 2)
+#' )
+#'
+#' strata |>
+#'   summarise(
+#'     islh_dsr(cases, population, standard) |>
+#'       select(cases, population, rate, lower, upper),
+#'     .by = area
+#'   )
 islh_dsr <- function(
   cases,
   population,
@@ -358,10 +400,20 @@ islh_dsr <- function(
 #'
 #' Use it to see why an interval is wide. A standardized rate for a small area
 #' is often driven by one or two strata with few cases and a large weight,
-#' usually the oldest age bands. `variance_share` shows that directly: a
-#' stratum with a share of 0.6 carries 60% of the variance. When one stratum
-#' dominates, consider broader age bands, a longer period or a larger area,
-#' applied the same way to every rate being compared.
+#' usually the oldest age bands. `variance_share` shows each stratum's share
+#' of the estimated variance: a stratum with a share of 0.6 carries 60% of it.
+#'
+#' The variance is not the whole story. Fay and Feuer's upper limit also adds
+#' the largest weight per person, `weight / population`, of any stratum. A
+#' stratum with no cases contributes nothing to the estimated variance, so its
+#' `variance_share` is 0, yet if it is a small population with a large weight
+#' it can set that term and widen the upper limit a great deal. Look at
+#' `weight` and `population` as well as `variance_share`.
+#'
+#' When a few strata dominate, a longer period or a larger area helps.
+#' Broader age bands also narrow the interval, but they leave more of the age
+#' difference unadjusted inside each band; see the getting-started guide.
+#' Apply any such choice the same way to every rate being compared.
 #'
 #' The detail holds every stratum's cases and population, so treat it as
 #' internal. [islh_suppress_table()] removes it, and this function then stops

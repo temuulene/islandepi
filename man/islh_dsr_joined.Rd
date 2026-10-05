@@ -46,16 +46,18 @@ tables must cover exactly the same unique, non-missing strata. Aggregate
 counts and denominators to a common age scheme before using this function.
 }
 \examples{
+library(dplyr)
+
 # Each table can arrive in its own row order; the keys line them up.
-events <- data.frame(
+events <- tibble(
   age = c("0-44", "45-64", "65+"),
   cases = c(12, 30, 85)
 )
-population <- data.frame(
+population <- tibble(
   age = c("65+", "0-44", "45-64"),
   population = c(21000, 60000, 31000)
 )
-standard <- data.frame(
+standard <- tibble(
   age = c("45-64", "65+", "0-44"),
   population = c(26000, 17000, 57000)
 )

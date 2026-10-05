@@ -57,6 +57,16 @@ Fay and Feuer's interval is exact whenever the standard population is
 proportional to the study population: with those weights it reduces to the
 exact Poisson interval on the pooled count. A regression test checks that
 property across several strata.
+
+It is conservative by design: its coverage is usually above the nominal
+level, more so when one small stratum has a large weight. Other tools use
+other methods. The Fingertips profiles and the APHO and OHID calculators
+use Dobson's method (Eayres 2008), so their intervals will not match these
+exactly. Tiwari, Clegg and Zou's modified gamma interval and Fay and Kim's
+mid-p gamma interval come closer to nominal coverage; neither is provided.
+
+To compare two standardized rates, use \code{\link[=islh_dsr_ratio]{islh_dsr_ratio()}}. Comparing their
+total cases and populations compares the crude rates instead.
 }
 \section{Zero denominators}{
 
@@ -87,9 +97,38 @@ islh_dsr(cases, population, standard)
 # Compare with the crude rate: standardizing removes the effect of this
 # population being older than the standard.
 islh_crude_rate(sum(cases), sum(population))
+
+# One standardized rate per area, from a table with a row for each area
+# and age group.
+library(dplyr)
+
+strata <- tibble(
+  area = rep(c("North", "South"), each = 4),
+  cases = c(5, 12, 40, 80, 9, 31, 52, 70),
+  population = c(20000, 25000, 22000, 15000, 41000, 52000, 38000, 21000),
+  standard = rep(c(30000, 30000, 25000, 15000), 2)
+)
+
+strata |>
+  summarise(
+    islh_dsr(cases, population, standard) |>
+      select(cases, population, rate, lower, upper),
+    .by = area
+  )
 }
 \references{
 Fay MP, Feuer EJ (1997). Confidence intervals for directly standardized
 rates: a method based on the gamma distribution.
 \emph{Statistics in Medicine} 16(7):791-801.
+
+Eayres D (2008). \emph{Technical Briefing 3: Commonly used public health
+statistics and their confidence intervals}. Association of Public Health
+Observatories.
+
+Tiwari RC, Clegg LX, Zou Z (2006). Efficient interval estimation for
+age-adjusted cancer rates. \emph{Statistical Methods in Medical Research}
+15(6):547-569.
+
+Fay MP, Kim S (2017). Confidence intervals for directly standardized rates
+using mid-p gamma intervals. \emph{Biometrical Journal} 59(2):377-387.
 }

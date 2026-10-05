@@ -50,9 +50,11 @@
 #' @export
 #'
 #' @examples
+#' library(dplyr)
+#'
 #' # Each site sends one file a day, including days with no cases. Site C
 #' # sent nothing on 3 and 4 August.
-#' log <- data.frame(
+#' log <- tibble(
 #'   site = c(rep(c("A", "B"), each = 7), rep("C", 5)),
 #'   date = as.Date("2026-08-01") + c(0:6, 0:6, 0, 1, 4, 5, 6)
 #' )
@@ -65,11 +67,12 @@
 #'   from = "2026-08-01",
 #'   to = "2026-08-07"
 #' )
-#' coverage[!coverage$received, ]
+#' coverage |>
+#'   filter(!received)
 #'
 #' # Daily counts from the events. Filling zeros makes 3 and 4 August look
 #' # like quiet days for site C.
-#' events <- data.frame(
+#' events <- tibble(
 #'   site = c("A", "A", "B", "C", "C"),
 #'   date = as.Date(c(
 #'     "2026-08-02", "2026-08-05", "2026-08-03", "2026-08-01", "2026-08-06"

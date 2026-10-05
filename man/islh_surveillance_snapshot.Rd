@@ -176,7 +176,7 @@ duration here with \code{baseline_interval}.
 }
 
 \examples{
-daily <- data.frame(
+daily <- dplyr::tibble(
   site = rep(c("A", "B"), each = 7),
   date = rep(seq(as.Date("2026-08-01"), by = "day", length.out = 7), 2),
   count = c(0, 1, 2, 0, 1, 0, 2, 1, 2, 1, 3, 1, 0, 1)
@@ -195,7 +195,7 @@ islh_surveillance_snapshot(
 # Site C is expected but sent nothing, and site B missed 6 August. With
 # the coverage check, C appears as unknown rather than vanishing, and the
 # All row is not reported as complete.
-log <- data.frame(
+log <- dplyr::tibble(
   site = c(rep("A", 7), rep("B", 6)),
   date = as.Date("2026-08-01") + c(0:6, 0:4, 6)
 )

@@ -27,7 +27,7 @@ Keep this record internal. Suppression reasons can constrain hidden values
 even without counts. This is not a release-safety check.
 }
 \examples{
-counts <- data.frame(
+counts <- dplyr::tibble(
   area = c("North", "Central", "South"),
   cases = c(3, 42, 17)
 )

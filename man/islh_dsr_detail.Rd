@@ -25,10 +25,20 @@ standardized rate and how much of the variance it carries.
 \details{
 Use it to see why an interval is wide. A standardized rate for a small area
 is often driven by one or two strata with few cases and a large weight,
-usually the oldest age bands. \code{variance_share} shows that directly: a
-stratum with a share of 0.6 carries 60\% of the variance. When one stratum
-dominates, consider broader age bands, a longer period or a larger area,
-applied the same way to every rate being compared.
+usually the oldest age bands. \code{variance_share} shows each stratum's share
+of the estimated variance: a stratum with a share of 0.6 carries 60\% of it.
+
+The variance is not the whole story. Fay and Feuer's upper limit also adds
+the largest weight per person, \code{weight / population}, of any stratum. A
+stratum with no cases contributes nothing to the estimated variance, so its
+\code{variance_share} is 0, yet if it is a small population with a large weight
+it can set that term and widen the upper limit a great deal. Look at
+\code{weight} and \code{population} as well as \code{variance_share}.
+
+When a few strata dominate, a longer period or a larger area helps.
+Broader age bands also narrow the interval, but they leave more of the age
+difference unadjusted inside each band; see the getting-started guide.
+Apply any such choice the same way to every rate being compared.
 
 The detail holds every stratum's cases and population, so treat it as
 internal. \code{\link[=islh_suppress_table]{islh_suppress_table()}} removes it, and this function then stops

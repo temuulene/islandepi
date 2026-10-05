@@ -69,28 +69,31 @@ before joining.
 }
 
 \examples{
-cases <- data.frame(
+library(dplyr)
+
+cases <- tibble(
   year = 2025,
   age_group = c("0-19", "20-64", "65+"),
   cases = c(4, 22, 31)
 )
-population <- data.frame(
+population <- tibble(
   year = 2025,
   age_group = c("0-19", "20-64", "65+"),
   population = c(18000, 51000, 23000)
 )
 
-joined <- islh_join_denominator(
-  cases,
-  population,
-  by = c("year", "age_group")
-)
-joined
-
-islh_crude_rate(joined$cases, joined$population)
+cases |>
+  islh_join_denominator(population, by = c("year", "age_group")) |>
+  mutate(
+    islh_crude_rate(cases, population) |>
+      select(rate, lower, upper)
+  )
 
 # A denominator table with one row per sex would double the counts, so
 # it is refused.
-by_sex <- rbind(population, population)
+by_sex <- bind_rows(
+  population |> mutate(sex = "F"),
+  population |> mutate(sex = "M")
+)
 try(islh_join_denominator(cases, by_sex, by = c("year", "age_group")))
 }

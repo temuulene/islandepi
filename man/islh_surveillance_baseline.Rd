@@ -76,7 +76,7 @@ data, otherwise the snapshot has nothing to check against and will say so.
 }
 
 \examples{
-weekly <- data.frame(
+weekly <- dplyr::tibble(
   site = rep(c("A", "B"), each = 8),
   week = rep(seq(as.Date("2026-01-04"), by = "week", length.out = 8), 2),
   count = c(2, 4, 3, 5, 2, 4, 3, 5, 6, 7, 5, 8, 6, 7, 5, 8)

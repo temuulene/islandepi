@@ -5,13 +5,17 @@
 #' performed, and adds a binomial confidence interval.
 #'
 #' `"wilson"` is the default. It is the Wilson score interval without
-#' continuity correction. It stays inside 0 to 1, behaves at 0 and at the
-#' denominator, and its coverage stays close to the nominal level even for
-#' small denominators, which the simple Wald interval does not.
+#' continuity correction. It stays inside 0 to 1 and behaves at 0 and at the
+#' denominator. Its coverage is close to the nominal level on average, even
+#' for small denominators, which the simple Wald interval's is not. It does
+#' not guarantee nominal coverage for every denominator and proportion: a
+#' nominal 95% interval covers about 92.5% of the time when `n` is 20 and the
+#' true proportion is 0.05 (Brown, Cai and DasGupta 2001).
 #'
 #' `"exact"` is the Clopper-Pearson interval. It guarantees at least nominal
-#' coverage, so it is wider than it needs to be on average. Use it when a
-#' release has to match a series that used it.
+#' coverage, so it is wider than it needs to be on average: about 98.4% in
+#' the same example. Use it when a release has to match a series that used it,
+#' or when falling short of the nominal level is not acceptable.
 #'
 #' @section What goes in the denominator:
 #'
@@ -54,14 +58,18 @@
 #'
 #' @examples
 #' # Share of simulated outbreak cases admitted to hospital, by HSDA.
-#' admitted <- tapply(
-#'   !is.na(islh_outbreak$date_admission),
-#'   islh_outbreak$hsda,
-#'   sum
-#' )
-#' cases <- table(islh_outbreak$hsda)
+#' library(dplyr)
 #'
-#' islh_proportion(as.vector(admitted), as.vector(cases), per = 100)
+#' islh_outbreak |>
+#'   summarise(
+#'     admitted = sum(!is.na(date_admission)),
+#'     cases = n(),
+#'     .by = hsda
+#'   ) |>
+#'   mutate(
+#'     islh_proportion(admitted, cases, per = 100) |>
+#'       select(proportion, lower, upper)
+#'   )
 #'
 #' # Small denominators are where the two methods differ most.
 #' islh_proportion(c(0, 1, 5), 20, method = "wilson")
