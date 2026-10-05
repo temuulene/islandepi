@@ -14,12 +14,18 @@ knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE
 )
-library(islandepi)
 ```
 
 `islandepi` provides small, validated functions for routine public health
 analysis. Every example on this page is evaluated when the website is built,
-so the printed values are actual package output.
+so the printed values are actual package output. The examples use dplyr and
+tidyr, which `islandepi` installs with itself.
+
+```{r packages}
+library(dplyr)
+library(tidyr)
+library(islandepi)
+```
 
 The package implements calculation mechanics. It does not choose the
 suppression threshold, standard population or interval method for a release.
@@ -36,9 +42,11 @@ examples, how leaving it out leads to wrong conclusions.
 | Group individual ages | `islh_age_group()` | Ordered factor |
 | Attach denominators with checked keys | `islh_join_denominator()` | Counts with a denominator column |
 | Calculate a crude rate | `islh_crude_rate()` | Data frame with rate and interval |
+| Compare two crude rates | `islh_rate_ratio()` | Ratio with an exact interval |
 | Calculate a proportion or percentage | `islh_proportion()` | Data frame with estimate and interval |
 | Calculate a Poisson count interval | `islh_ci_poisson()` | Data frame with lower and upper limits |
 | Calculate a directly standardized rate | `islh_dsr_joined()`, `islh_dsr()` | One-row data frame |
+| Compare two standardized rates | `islh_dsr_ratio()` | Ratio with Fay's F interval |
 | Get a published standard population | `islh_standard_population()` | Age bands with weights |
 | See which strata drive a standardized rate | `islh_dsr_detail()` | One row per stratum |
 | Hide small counts | `islh_suppress()` | Numeric or labelled character vector |
@@ -57,7 +65,18 @@ health areas, November 2025 to March 2026. It was simulated with the
 describes a real person.
 
 ```{r example-data}
-head(islh_outbreak[c("case_id", "age", "sex", "date_onset", "hsda", "lha_name")])
+islh_outbreak |>
+  select(case_id, age, sex, date_onset, hsda, lha_name) |>
+  slice_head(n = 6)
+```
+
+The denominators are real: `islh_lha_population` holds BC Stats' estimates of
+each local health area's population on 1 July 2025, by sex and five-year age
+group, as `islh_bc_population()` returns them.
+
+```{r population-data}
+islh_lha_population |>
+  slice_head(n = 4)
 ```
 
 ## A complete rate workflow
@@ -72,91 +91,168 @@ The indicator is hospital admissions with the simulated winter virus, by
 health service delivery area (HSDA), for onsets from 3 November 2025 to
 8 March 2026, age-standardized to the 2011 Canadian population.
 
+That window is 18 weeks. The rates below are admissions per 100,000 people
+over those 18 weeks, not per year: they are not annualized. Say so beside
+every rate, because a reader will otherwise assume an annual rate.
+
 ```{r workflow-counts}
 hsdas <- c(
   "South Vancouver Island",
   "Central Vancouver Island",
   "North Vancouver Island"
 )
-admitted_cases <- islh_outbreak[
-  !is.na(islh_outbreak$date_admission) &
-    islh_outbreak$date_onset >= as.Date("2025-11-03") &
-    islh_outbreak$date_onset <= as.Date("2026-03-08"),
-]
-admitted_cases$age_group <- islh_age_group(admitted_cases$age, breaks = "broad")
+period <- "3 November 2025 to 8 March 2026 (18 weeks)"
 
 # Count every area and age band, including any band with no admissions.
-# Both columns are factors, so table() keeps the empty combinations as zeros.
-admissions <- as.data.frame(
-  table(
-    hsda = factor(admitted_cases$hsda, levels = hsdas),
-    age_group = admitted_cases$age_group
-  ),
-  responseName = "cases",
-  stringsAsFactors = FALSE
-)
+admissions <- islh_outbreak |>
+  filter(
+    !is.na(date_admission),
+    between(date_onset, as.Date("2025-11-03"), as.Date("2026-03-08"))
+  ) |>
+  mutate(age_group = islh_age_group(age, breaks = "broad")) |>
+  count(hsda, age_group, name = "cases") |>
+  complete(hsda = hsdas, age_group, fill = list(cases = 0L))
+
 admissions
 ```
 
 A stratum with no admissions still belongs in a standardized rate. Dropping
-it would change the weights. Counting with factors, or with
-`islh_count_events()` and its `groups` argument, keeps it.
+it would change the weights. `complete()` adds it back as a zero, because
+`age_group` is a factor that knows every band; `islh_count_events()` and its
+`groups` argument do the same for counts over time.
 
-The denominators below split BC Stats' 2025 HSDA totals across the three age
-bands in illustrative proportions. In a real analysis they come from
-`islh_bc_population()`, saved with its provenance: see the BC data article.
-The standard is the 2011 Canadian population in the same bands.
+The denominators come from `islh_lha_population`, grouped into the same three
+bands. In a real analysis, retrieve current estimates with
+`islh_bc_population()` and save them with their provenance: see the BC data
+article. The standard is the 2011 Canadian population in the same bands.
 
 ```{r workflow-denominators}
-hsda_age_population <- data.frame(
-  hsda = rep(hsdas, each = 3),
-  age_group = rep(c("0-19", "20-64", "65+"), times = 3),
-  population = c(
-    83535, 269167, 111379,
-    57657, 172972, 89690,
-    30094, 81684, 31527
-  )
-)
+# The first age in each five-year group, such as 65 for "65-69".
+band_start <- function(age_group) as.numeric(sub("[-+].*", "", age_group))
+
+hsda_age_population <- islh_lha_population |>
+  mutate(age_group = islh_age_group(band_start(age_group), breaks = "broad")) |>
+  summarise(population = sum(population), .by = c(hsda, age_group))
+
 standard <- islh_standard_population("canada_2011", age_breaks = c(0, 20, 65))
-standard$age_group <- as.character(standard$age_group)
+
+hsda_age_population |>
+  pivot_wider(names_from = age_group, values_from = population)
 ```
 
 Each area's rate comes from `islh_dsr_joined()`, which lines the three tables
 up by key and stops if any of them is missing an age band:
 
 ```{r workflow-rates}
-rates <- do.call(rbind, lapply(hsdas, function(area) {
-  rate <- islh_dsr_joined(
-    admissions[admissions$hsda == area, c("age_group", "cases")],
-    hsda_age_population[
-      hsda_age_population$hsda == area,
-      c("age_group", "population")
-    ],
+hsda_rate <- function(area) {
+  islh_dsr_joined(
+    admissions |> filter(hsda == area) |> select(age_group, cases),
+    hsda_age_population |> filter(hsda == area) |> select(age_group, population),
     standard,
     by = "age_group",
     standard_id = standard$standard_id[1]
   )
-  data.frame(
-    hsda = area,
-    cases = rate$cases,
-    population = rate$population,
-    rate = round(rate$rate, 1),
-    lower = round(rate$lower, 1),
-    upper = round(rate$upper, 1)
-  )
-}))
+}
+
+rates <- tibble(hsda = hsdas) |>
+  reframe(
+    hsda_rate(hsda) |> select(cases, population, rate, lower, upper),
+    .by = hsda
+  ) |>
+  mutate(across(c(rate, lower, upper), \(x) round(x, 1)), period = period)
+
 rates
 ```
 
 ```{r workflow-facts, include=FALSE}
-widest <- rates[which.max(rates$upper - rates$lower), ]
+widest <- rates |> slice_max(upper - lower, n = 1)
+north_south <- islh_dsr_ratio(
+  hsda_rate("North Vancouver Island"),
+  hsda_rate("South Vancouver Island")
+)
 ```
 
 Every rate carries its 95% Fay-Feuer interval. With `r widest$cases`
 admissions, `r widest$hsda`'s interval runs from `r widest$lower` to
-`r widest$upper` per 100,000. Compare two areas with a ratio and its interval
-before saying one is higher, rather than by their order in the table. The
-[intervals article](intervals.html) explains why.
+`r widest$upper` per 100,000.
+
+Before saying one area's rate is higher than another's, compare them with a
+ratio and its interval, not by their order in the table. These are
+standardized rates, so use `islh_dsr_ratio()`, which is built for them.
+Comparing their total admissions and populations with `islh_rate_ratio()`
+or `stats::poisson.test()` would compare the crude rates instead:
+
+```{r workflow-compare}
+islh_dsr_ratio(
+  hsda_rate("North Vancouver Island"),
+  hsda_rate("South Vancouver Island")
+) |>
+  select(ratio, lower, upper, method)
+```
+
+The North Island's rate is estimated at
+`r round(north_south$ratio, 1)` times the South Island's, but the interval,
+`r round(north_south$lower, 2)` to `r round(north_south$upper, 1)`, is
+compatible with the North's rate being half the South's or nearly four times
+it. Nine admissions cannot say more. The
+[intervals article](intervals.html#comparing-two-rates) explains the
+methods.
+
+### Check the age bands
+
+Three broad bands keep the example small, and they are coarse. Each band
+still holds a wide range of ages: admission risk rises steeply from 65 to 90,
+so an area with more people in their 80s has more admissions in the 65+ band
+at the same risk at each age. Using the same broad bands for every area does
+not remove that difference. Standardization adjusts only for the age
+differences *between* bands.
+
+So the bands are a trade-off. Finer bands adjust more completely; broader
+bands give fewer empty or sparse strata and narrower intervals. For a
+production indicator, use the age bands of the series you compare with, and
+check how much the result moves when bands are pooled:
+
+```{r band-sensitivity}
+rates_with <- function(breaks) {
+  counts <- islh_outbreak |>
+    filter(
+      !is.na(date_admission),
+      between(date_onset, as.Date("2025-11-03"), as.Date("2026-03-08"))
+    ) |>
+    mutate(age_group = islh_age_group(age, breaks = breaks)) |>
+    count(hsda, age_group, name = "cases") |>
+    complete(hsda = hsdas, age_group, fill = list(cases = 0L))
+  population <- islh_lha_population |>
+    mutate(age_group = islh_age_group(band_start(age_group), breaks = breaks)) |>
+    summarise(population = sum(population), .by = c(hsda, age_group))
+  weights <- islh_standard_population("canada_2011", age_breaks = breaks)
+  rate_for <- function(area) {
+    islh_dsr_joined(
+      counts |> filter(hsda == area) |> select(age_group, cases),
+      population |> filter(hsda == area) |> select(age_group, population),
+      weights,
+      by = "age_group",
+      standard_id = weights$standard_id[1]
+    )
+  }
+
+  tibble(hsda = hsdas) |>
+    reframe(rate_for(hsda) |> select(rate, lower, upper), .by = hsda)
+}
+
+bind_rows(
+  `three bands` = rates_with(c(0, 20, 65)),
+  `five bands` = rates_with(c(0, 20, 45, 65, 80)),
+  .id = "age_bands"
+) |>
+  mutate(across(c(rate, lower, upper), \(x) round(x, 2))) |>
+  arrange(hsda)
+```
+
+Here five bands, which split off the 80+ group, move each rate by less than
+0.1 per 100,000, so the three broad bands are adequate for this comparison.
+That will not always hold. Check it whenever areas differ in how old their
+oldest residents are, and report the bands used.
 
 Last, apply the release rule and make the copy that leaves the team. The
 threshold here is illustrative; use the approved rule for the release:
@@ -170,13 +266,14 @@ checked <- islh_suppress_table(
 )
 released <- islh_release_copy(
   checked,
-  c("hsda", "cases", "rate", "lower", "upper")
+  c("hsda", "period", "cases", "rate", "lower", "upper")
 )
 released
 ```
 
 `checked` is the working object, with its suppression audit for reviewers.
-`released` is the plain table to share.
+`released` is the plain table to share. It keeps the period, so the rates
+cannot be mistaken for annual ones.
 
 ## Group ages
 
@@ -184,9 +281,9 @@ The result is an ordered factor, which preserves the correct order in tables
 and plots.
 
 ```{r age-groups}
-cases <- islh_outbreak
-cases$age_group <- islh_age_group(cases$age, breaks = "broad")
-table(cases$age_group)
+islh_outbreak |>
+  mutate(age_group = islh_age_group(age, breaks = "broad")) |>
+  count(age_group)
 ```
 
 Built-in choices are `"five_year"`, `"phac"` and `"broad"`. A local set of
@@ -205,8 +302,10 @@ before calculating a rate rather than silently dropping them.
 `islh_crude_rate()` returns the numerator and denominator beside the estimate
 and confidence limits, making the calculation easy to audit.
 
-The case counts come from the simulated outbreak. The denominators are BC
-Stats' 2025 population estimates for each health service delivery area.
+The case counts are every case in the simulated outbreak, onsets from
+3 November 2025 to 6 March 2026. The denominators are BC Stats' 2025
+population estimates for each health service delivery area, so the rates are
+cases per 100,000 people over the whole wave, not per year.
 
 Keep counts and denominators in separate tables and join them on explicit
 keys. `islh_join_denominator()` stops if a count has no denominator, if the
@@ -214,33 +313,31 @@ denominator table has more than one row for a key, or if a key is text in one
 table and a number in the other:
 
 ```{r crude-rate}
-hsda_population <- data.frame(
-  hsda = c(
-    "South Vancouver Island",
-    "Central Vancouver Island",
-    "North Vancouver Island"
-  ),
-  population = c(464081, 320319, 143305)
-)
-hsda_cases <- as.data.frame(table(hsda = cases$hsda), responseName = "cases")
-hsda_cases$hsda <- as.character(hsda_cases$hsda)
+hsda_population <- islh_lha_population |>
+  summarise(population = sum(population), .by = hsda)
 
-by_hsda <- islh_join_denominator(hsda_cases, hsda_population, by = "hsda")
+hsda_cases <- islh_outbreak |>
+  count(hsda, name = "cases")
 
-crude <- islh_crude_rate(
-  cases = by_hsda$cases,
-  population = by_hsda$population,
-  per = 100000
-)
-cbind(
-  by_hsda["hsda"],
-  round(crude[c("cases", "population", "rate", "lower", "upper")], 1)
-)
+crude <- islh_join_denominator(hsda_cases, hsda_population, by = "hsda") |>
+  mutate(
+    islh_crude_rate(cases, population, per = 100000) |>
+      select(rate, lower, upper, method)
+  )
+
+crude |>
+  mutate(across(c(rate, lower, upper), \(x) round(x, 1)))
 ```
 
 Read each row as that area's cases in its population, expressed per 100,000
 people, with the chosen Poisson interval. Counts may exceed the denominator
 when the numerator contains repeat events and the denominator is person-time.
+
+The interval treats the count as Poisson and the population as fixed. It
+describes the uncertainty in the rate of *reported* cases under that model,
+not the rate of infection, and it is too narrow when cases cluster, as they do
+in an outbreak. The [intervals article](intervals.html#what-the-interval-assumes)
+explains these assumptions.
 
 `method` records which interval each row actually used. The default,
 `method = "auto"`, takes the exact interval for counts below 10 and Byar's
@@ -255,22 +352,28 @@ as immunization coverage, test positivity or the share of cases admitted to
 hospital. The numerator must be a subset of the denominator.
 
 ```{r proportion}
-admitted <- tapply(!is.na(cases$date_admission), cases$hsda, sum)
-total <- tapply(cases$case_id, cases$hsda, length)
-
-share <- islh_proportion(admitted, total, per = 100)
-cbind(
-  hsda = names(total),
-  round(share[c("x", "n", "proportion", "lower", "upper")], 1)
-)
+islh_outbreak |>
+  summarise(
+    admitted = sum(!is.na(date_admission)),
+    cases = n(),
+    .by = hsda
+  ) |>
+  mutate(
+    islh_proportion(admitted, cases, per = 100) |>
+      select(proportion, lower, upper),
+    across(c(proportion, lower, upper), \(x) round(x, 1))
+  )
 ```
 
-The default Wilson score interval stays within 0 to 100% and keeps close to
-its stated coverage for small denominators. Use `method = "exact"` for the
-Clopper-Pearson interval when a series requires it. Decide how records with
-an unknown status are handled before calculating, and say so in the table
-notes. Survey-weighted prevalence needs a method that accounts for the survey
-design, not these intervals.
+The default Wilson score interval stays within 0 to 100%, and for small
+denominators its coverage is close to the stated level on average. It is not
+guaranteed for every case: a nominal 95% Wilson interval for 20 people and a
+true proportion of 5% covers about 92.5% of the time (Brown, Cai and DasGupta
+2001). Use `method = "exact"` for the Clopper-Pearson interval, which never
+covers less than the stated level and is wider for it, or when a series
+requires it. Decide how records with an unknown status are handled before
+calculating, and say so in the table notes. Survey-weighted prevalence needs a
+method that accounts for the survey design, not these intervals.
 
 ## Poisson count intervals
 
@@ -297,14 +400,14 @@ The case and population figures below are illustrative.
 
 ```{r standardized-rate}
 standard <- islh_standard_population("canada_2011", age_breaks = c(0, 20, 45, 65))
-standard$age_group <- as.character(standard$age_group)
-standard[c("age_group", "population", "weight")]
+standard |>
+  select(age_group, population, weight)
 
-age_cases <- data.frame(
+age_cases <- tibble(
   age_group = c("0-19", "20-44", "45-64", "65+"),
   cases = c(5, 12, 40, 80)
 )
-age_population <- data.frame(
+age_population <- tibble(
   age_group = c("65+", "45-64", "20-44", "0-19"),
   population = c(15000, 22000, 25000, 20000)
 )
@@ -312,36 +415,67 @@ age_population <- data.frame(
 dsr <- islh_dsr_joined(
   age_cases,
   age_population,
-  standard,
+  standard |> mutate(age_group = as.character(age_group)),
   by = "age_group",
   standard_id = standard$standard_id[1]
 )
-round(dsr[c("cases", "population", "rate", "lower", "upper")], 1)
+dsr |>
+  select(cases, population, rate, lower, upper) |>
+  round(1)
 ```
 
 The returned `population` is the total observed denominator. The standard
 population is converted to weights and is not added to the result.
 `standard_id` records which standard was used. `method = "gamma"` uses the
-Fay-Feuer interval; `"normal"` is available for comparison with analyses that
-explicitly require it. `islh_dsr()` takes the same inputs as vectors already
-in stratum order.
+Fay-Feuer interval (Fay and Feuer 1997); `"normal"` is available for
+comparison with analyses that explicitly require it. `islh_dsr()` takes the
+same inputs as vectors already in stratum order.
+
+The Fay-Feuer interval is conservative by design: it usually covers more often
+than its stated level. Tools built on Dobson's method, such as the Fingertips
+profiles, give somewhat narrower intervals, so the two will not match exactly.
 
 `islh_dsr_detail()` shows how each stratum feeds the result. The
-contributions add up to the standardized rate, and `variance_share` shows which
-strata make the interval wide:
+contributions add up to the standardized rate, and `variance_share` shows each
+stratum's share of the estimated variance:
 
 ```{r dsr-detail}
-detail <- islh_dsr_detail(dsr)
-detail$rate <- round(detail$rate, 1)
-detail$contribution <- round(detail$contribution, 1)
-detail$variance_share <- round(detail$variance_share, 2)
-detail
+islh_dsr_detail(dsr) |>
+  mutate(
+    across(c(rate, contribution), \(x) round(x, 1)),
+    across(c(weight, variance_share), \(x) round(x, 2))
+  )
 ```
 
 Here the two oldest bands carry more than 80% of the variance, because their
-rates are highest and their populations are smaller. In a small area, one or
-two sparse strata can dominate like this. Broader bands, a longer period or a
-larger area help, applied the same way to every rate being compared.
+rates are highest and their populations are smaller.
+
+The variance is not the whole story of the interval's width. Fay and Feuer's
+upper limit also adds the largest weight per person of any stratum. A stratum
+with no cases adds nothing to the variance, so its `variance_share` is 0, yet
+if its population is small and its weight large it can widen the upper limit a
+great deal. Below, three equally weighted strata hold 0, 30 and 60 cases; only
+the size of the empty stratum changes:
+
+```{r empty-stratum}
+tibble(empty_stratum_population = c(20000, 2000, 200)) |>
+  reframe(
+    islh_dsr(
+      cases = c(0, 30, 60),
+      population = c(empty_stratum_population, 20000, 20000),
+      std_population = c(1, 1, 1)
+    ) |>
+      select(rate, lower, upper),
+    .by = empty_stratum_population
+  ) |>
+  mutate(across(c(rate, lower, upper), \(x) round(x, 1)))
+```
+
+The rate and the lower limit do not move, while the upper limit nearly
+quadruples. So read `weight` and `population` in the detail as well as
+`variance_share`. A longer period or a larger area helps; broader age bands
+also help, at the cost described in the workflow above. Apply any such choice
+the same way to every rate being compared.
 
 Standardization answers one question: would two populations differ if they
 had the same age structure? In the example below, both areas have exactly the
@@ -349,44 +483,30 @@ same rate in every age band. Area B is older, so its crude rate is higher, but
 the standardized rates are identical:
 
 ```{r same-risk}
-same_risk <- data.frame(
+same_risk <- tibble(
   age_group = c("0-19", "20-44", "45-64", "65+"),
-  rate_per_person = c(0.0002, 0.0005, 0.0020, 0.0060)
-)
-area_a <- data.frame(
-  age_group = same_risk$age_group,
-  population = c(30000, 40000, 20000, 10000)
-)
-area_b <- data.frame(
-  age_group = same_risk$age_group,
-  population = c(15000, 26000, 30000, 30000)
-)
-area_a$cases <- round(area_a$population * same_risk$rate_per_person)
-area_b$cases <- round(area_b$population * same_risk$rate_per_person)
+  rate_per_person = c(0.0002, 0.0005, 0.0020, 0.0060),
+  area_a = c(30000, 40000, 20000, 10000),
+  area_b = c(15000, 26000, 30000, 30000)
+) |>
+  pivot_longer(c(area_a, area_b), names_to = "area", values_to = "population") |>
+  mutate(cases = round(population * rate_per_person))
 
-rates <- rbind(
-  area_a = c(
-    crude = sum(area_a$cases) / sum(area_a$population) * 1e5,
-    standardized = islh_dsr_joined(
-      area_a[c("age_group", "cases")],
-      area_a[c("age_group", "population")],
-      standard,
-      by = "age_group",
-      standard_id = standard$standard_id[1]
-    )$rate
-  ),
-  area_b = c(
-    crude = sum(area_b$cases) / sum(area_b$population) * 1e5,
-    standardized = islh_dsr_joined(
-      area_b[c("age_group", "cases")],
-      area_b[c("age_group", "population")],
-      standard,
-      by = "age_group",
-      standard_id = standard$standard_id[1]
-    )$rate
-  )
-)
-round(rates, 1)
+area_rates <- function(this_area) {
+  area <- same_risk |> filter(area == this_area)
+  islh_dsr_joined(
+    area |> select(age_group, cases),
+    area |> select(age_group, population),
+    standard |> mutate(age_group = as.character(age_group)),
+    by = "age_group",
+    standard_id = standard$standard_id[1]
+  ) |>
+    transmute(crude = cases / population * 1e5, standardized = rate)
+}
+
+tibble(area = c("area_a", "area_b")) |>
+  reframe(area_rates(area), .by = area) |>
+  mutate(across(c(crude, standardized), \(x) round(x, 1)))
 ```
 
 A crude rate is still the right number for planning services, because it
@@ -410,16 +530,15 @@ For a table, count the simulated cases and admissions in each North Island
 local health area. The small areas have few cases, and fewer admissions:
 
 ```{r suppress-table}
-north <- cases[cases$hsda == "North Vancouver Island", ]
-area_counts <- data.frame(
-  area = sort(unique(north$lha_name)),
-  cases = as.vector(table(north$lha_name)),
-  admitted = as.vector(tapply(
-    !is.na(north$date_admission),
-    north$lha_name,
-    sum
-  ))
-)
+area_counts <- islh_outbreak |>
+  filter(hsda == "North Vancouver Island") |>
+  summarise(
+    cases = n(),
+    admitted = sum(!is.na(date_admission)),
+    .by = lha_name
+  ) |>
+  rename(area = lha_name) |>
+  arrange(area)
 area_counts
 
 islh_suppress_table(
@@ -435,15 +554,13 @@ away: multiply the rate by the population and it is back. `linked` hides
 those columns in the same rows:
 
 ```{r linked-suppression}
-area_rates <- area_counts
-area_rates$rate <- round(area_rates$admitted / area_rates$cases * 100, 1)
-
-islh_suppress_table(
-  area_rates,
-  cols = "admitted",
-  threshold = 5,
-  linked = list(admitted = "rate")
-)
+area_counts |>
+  mutate(rate = round(admitted / cases * 100, 1)) |>
+  islh_suppress_table(
+    cols = "admitted",
+    threshold = 5,
+    linked = list(admitted = "rate")
+  )
 ```
 
 Linked cells become `NA` and keep the column numeric. Set `linked_label` to
@@ -468,7 +585,7 @@ for a table carrying one overall total. Where a table is subtotalled, name the
 subtotal columns with `by` so the rule runs inside each block:
 
 ```{r grouped-suppression}
-by_authority <- data.frame(
+by_authority <- tibble(
   authority = c("Island", "Island", "Interior", "Interior"),
   area = c("North", "South", "East", "West"),
   cases = c(2, 30, 4, 25)
@@ -556,19 +673,15 @@ returns one row for every value that differs, plus rows only one table has.
 No rows means full agreement.
 
 ```{r compare-outputs}
-dashboard <- data.frame(
-  hsda = by_hsda$hsda,
-  cases = by_hsda$cases,
-  rate = round(crude$rate, 1)
-)
-# Pretend the dashboard counted one case differently.
-dashboard$cases[1] <- dashboard$cases[1] + 1
+r_output <- crude |>
+  select(hsda, cases, rate)
 
-r_output <- data.frame(
-  hsda = by_hsda$hsda,
-  cases = by_hsda$cases,
-  rate = crude$rate
-)
+# The dashboard rounds its rates, and counted one case differently.
+dashboard <- r_output |>
+  mutate(
+    rate = round(rate, 1),
+    cases = replace(cases, 1, cases[1] + 1)
+  )
 
 islh_compare_outputs(r_output, dashboard, by = "hsda", tolerance = 0.05)
 ```
@@ -586,3 +699,13 @@ for unmatched rows.
 
 Use `islandbrand` after the calculation when the result needs an Island Health
 figure, table or Quarto report.
+
+## References
+
+Brown LD, Cai TT, DasGupta A (2001). Interval estimation for a binomial
+proportion. *Statistical Science* 16(2):101-133.
+<https://doi.org/10.1214/ss/1009213286>
+
+Fay MP, Feuer EJ (1997). Confidence intervals for directly standardized rates:
+a method based on the gamma distribution. *Statistics in Medicine*
+16(7):791-801.

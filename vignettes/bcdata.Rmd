@@ -63,46 +63,59 @@ Female and male rows are returned separately. Summing them produces a total
 without double counting. Alternatively, request `sex = "T"` on its own when
 the catalogue total is required.
 
-The downloaded object has eight columns. The rows below are typed in so the
-website can show the shape without a live catalogue request. The values are
-BC Stats' 2025 estimates for two Island Health LHAs, both sexes, from the
-Local Health Areas resource of the BC Sub-Provincial Population Estimates and
-Projections record. To keep the example short, it shows only the first three
-five-year age bands, ages 0 to 14. A real extract has every age band.
+### What the estimates describe
+
+Each estimate is the population on **1 July** of its year, so it is a
+mid-year value: the usual denominator for a rate over that calendar year. For
+a period that crosses two years, such as a respiratory season from September
+to April, either use the year that holds most of the period or average the
+two years, and say which in the release. For a period shorter than a year, say
+the rate is for that period, as the [Getting started](islandepi.html) article
+does for an 18-week window, or convert the population to person-time.
+
+BC Stats labels the sex column `Gender`, with the categories `F` and `M`;
+`islh_bc_population()` names it `sex`. For every area the two sum to the
+published total, `T`. That is the catalogue's definition, not necessarily the
+one in your case data. Before calculating rates by sex, check how the line
+list records sex or gender, and how it codes people who are neither `F` nor
+`M` or whose value is missing. Cases in a category the denominator does not
+have cannot go into a sex-specific rate, so report how many there are.
+
+### The shape of an extract
+
+The downloaded object has eight columns: `geography`, `geography_code`,
+`geography_name`, `year`, `estimate_type`, `sex`, `age_group` and
+`population`. For examples and teaching, the package also holds a saved copy
+of the 2025 estimates for Island Health's 14 local health areas,
+`islh_lha_population`. It has the same columns, except that `hsda` takes the
+place of `geography`, and it needs no network request. Use a fresh download
+for a report.
+
+To keep the example short, it takes two local health areas and the first
+three five-year age bands, ages 0 to 14:
 
 ```{r population-shape}
-population_example <- data.frame(
-  geography = rep("lha", 6),
-  geography_code = c("411", "411", "411", "412", "412", "412"),
-  geography_name = c(
-    rep("Greater Victoria", 3),
-    rep("Western Communities", 3)
-  ),
-  year = rep(2025L, 6),
-  estimate_type = rep("Estimate", 6),
-  sex = rep("T", 6),
-  age_group = factor(
-    rep(c("0-4", "5-9", "10-14"), 2),
-    levels = c("0-4", "5-9", "10-14"),
-    ordered = TRUE
-  ),
-  population = c(7313, 9349, 10222, 5054, 6155, 6244)
-)
+population_example <- islh_lha_population |>
+  filter(
+    geography_name %in% c("Greater Victoria", "Western Communities"),
+    age_group <= "10-14"
+  )
 population_example
 ```
 
-Summing over age groups gives one denominator per geography, but only for the
-ages present. Check which bands a sum covers before you name it. Here the sum
-is the population aged 0 to 14, not the total population, and the object is
-named to say so:
+Summing over sex and age group gives one denominator per area, but only for
+the ages present. Check which bands a sum covers before you name it. Here the
+sum is the population aged 0 to 14, not the total population, and the object
+is named to say so:
 
 ```{r population-total}
-unique(population_example$age_group)
+population_example |>
+  distinct(age_group)
 
 population_0_14 <- population_example |>
   summarise(
     population = sum(population),
-    .by = c(geography, geography_code, geography_name, year, estimate_type)
+    .by = c(geography_code, geography_name, year, estimate_type)
   )
 population_0_14
 ```
@@ -186,18 +199,17 @@ denominator table has more than one row per key, or if a code is text in one
 table and a number in the other:
 
 ```{r checked-example-join}
-cases_0_14 <- data.frame(
-  geography = c("lha", "lha"),
+cases_0_14 <- tibble(
   geography_code = c("411", "412"),
   cases = c(38, 21)
 )
 
-joined_example <- islh_join_denominator(
-  cases_0_14,
-  population_0_14,
-  by = c("geography", "geography_code")
-)
-joined_example
+cases_0_14 |>
+  islh_join_denominator(population_0_14, by = "geography_code") |>
+  mutate(
+    islh_crude_rate(cases, population, per = 100000) |>
+      select(rate, lower, upper)
+  )
 ```
 
 The case counts are illustrative. When the join stops, check
@@ -212,9 +224,9 @@ must travel with an analytical extract.
 
 ## Reproducible extracts
 
-The package retrieves current catalogue content and deliberately does not ship
-copied datasets. The pinned record and resource identifiers say where the data
-came from, but not which version: BC Stats revises estimates, and a later
+The download functions retrieve current catalogue content. `islh_lha_population`
+is a fixed copy for examples, not a substitute. The pinned record and resource
+identifiers say where the data came from, but not which version: BC Stats revises estimates, and a later
 download of the same resource can differ. For a governed analysis, save the
 retrieved object in the project with its retrieval date and source metadata,
 and read the saved copy from then on:

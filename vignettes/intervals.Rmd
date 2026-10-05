@@ -17,13 +17,17 @@ knitr::opts_chunk$set(
   fig.height = 5,
   fig.retina = 2
 )
-library(islandepi)
 has_plots <- requireNamespace("islandbrand", quietly = TRUE) &&
   requireNamespace("ggplot2", quietly = TRUE)
 ```
 
 ```{r plot-setup, include=FALSE, eval=has_plots}
 islandbrand::islh_setup(format = "plots", quiet = TRUE)
+```
+
+```{r packages}
+library(dplyr)
+library(islandepi)
 ```
 
 A rate on its own looks exact. "89.5 per 100,000" reads as a precise fact, but
@@ -39,15 +43,38 @@ so the printed values are actual package output.
 ## Every case is counted. Why an interval?
 
 Surveillance counts every reported case, so the count is not an estimate from a
-sample. But the questions a report answers are about risk. Is the risk higher
-in this area than that one? Is it higher this year than last?
+sample. But the questions a report answers are about the underlying rate: is
+it higher in this area than that one? Is it higher this year than last?
 
-The cases that occur in a year are one outcome of the underlying risk. With
-exactly the same risk, a different year would bring a different count, in the
+The cases that occur in a year are one outcome of that underlying rate. With
+exactly the same rate, a different year would bring a different count, in the
 same way that a fair coin does not land heads exactly half the time. Treating
 the count as a Poisson count, the confidence interval gives the underlying
 rates that are compatible with what was observed. This is the standard
 approach for routine public health statistics (Eayres 2008).
+
+### What the interval assumes
+
+The interval comes from a model, and it is only as good as the model's
+assumptions:
+
+- **Cases are independent Poisson counts.** Each case arrives independently
+  of the others.
+- **The denominator is fixed and known.** A population estimate is treated as
+  exact.
+
+Under those assumptions the interval describes the uncertainty in the rate of
+*reported* events. That is not the rate of infection or of disease:
+under-reporting, testing practice and case definitions shape the reported
+rate, and the interval says nothing about them.
+
+Real counts often vary more than Poisson counts do. Cases in an outbreak are
+linked, so they arrive in clusters; one person can have several encounters or
+admissions; records from one facility can move together. This extra-Poisson
+variation, or overdispersion, makes Poisson intervals too narrow (Spiegelhalter
+2005). Counting recurrent events is legitimate, but it does not make Poisson
+intervals right for them. When cases are likely to cluster, read the interval
+as the least uncertainty there is.
 
 A confidence interval is about the underlying rate, not about next year's
 count. Predicting a future count also has to allow for that count's own
@@ -60,56 +87,55 @@ about 259,000. The populations below are BC Stats' 2025 estimates. The case
 counts in this article are illustrative.
 
 ```{r lha}
-lha <- data.frame(
-  lha = c(
-    "Greater Victoria", "Greater Nanaimo", "Western Communities",
-    "Comox Valley", "Saanich Peninsula", "Cowichan Valley South",
-    "Oceanside", "Greater Campbell River", "Alberni/Clayoquot",
-    "Cowichan Valley North", "Southern Gulf Islands",
-    "Vancouver Island North", "Cowichan Valley West", "Vancouver Island West"
-  ),
-  population = c(
-    258999, 133395, 113681, 80091, 72271, 66122, 54815, 49412, 36288, 22370,
-    19130, 11568, 7329, 2234
-  )
-)
+lha <- islh_lha_population |>
+  summarise(population = sum(population), .by = geography_name) |>
+  rename(lha = geography_name) |>
+  arrange(desc(population))
+lha
 ```
 
 Suppose the smallest and the largest LHA report the same rate:
 
 ```{r same-rate}
-two <- lha[lha$lha %in% c("Vancouver Island West", "Greater Victoria"), ]
-two$cases <- c(233, 2)
-rownames(two) <- NULL
+same <- lha |>
+  filter(lha %in% c("Greater Victoria", "Vancouver Island West")) |>
+  mutate(
+    cases = c(233, 2),
+    islh_crude_rate(cases, population) |> select(rate, lower, upper)
+  )
 
-same <- islh_crude_rate(two$cases, two$population)
-cbind(two["lha"], round(same[c("cases", "rate", "lower", "upper")], 1))
+same |>
+  mutate(across(c(rate, lower, upper), \(x) round(x, 1)))
+```
+
+```{r same-facts, include=FALSE}
+victoria <- same |> filter(lha == "Greater Victoria")
+west <- same |> filter(lha == "Vancouver Island West")
 ```
 
 Both rates are about 90 per 100,000. In Greater Victoria the interval runs from
-`r round(same$lower[1])` to `r round(same$upper[1])`, so the rate is pinned down
-to within about 12%. In Vancouver Island West it runs from
-`r round(same$lower[2])` to `r round(same$upper[2])`. One more case there would
-add `r round(1 / two$population[2] * 1e5)` per 100,000 to the rate. Without the
-interval, a reader cannot tell these two numbers apart.
+`r round(victoria$lower)` to `r round(victoria$upper)`: from about
+`r round(100 * (1 - victoria$lower / victoria$rate))`% below the rate to
+`r round(100 * (victoria$upper / victoria$rate - 1))`% above it. In Vancouver
+Island West it runs from `r round(west$lower)` to `r round(west$upper)`. One
+more case there would add `r round(1 / west$population * 1e5)` per 100,000 to
+the rate. Without the interval, a reader cannot tell these two numbers apart.
 
 For a given confidence level and method, the relative width of a rate's
 interval, its width compared with the rate itself, depends almost entirely on
 the number of events. The population sets the scale: the same count in a
 smaller population gives a higher rate and an interval that is wider in rate
 units, but no wider relative to the rate. The table shows the relative width
-for different counts:
+for different counts, using the exact Poisson interval (Garwood 1936):
 
 ```{r width-by-count}
-events <- c(1, 2, 5, 10, 20, 50, 100, 500)
-limits <- islh_ci_poisson(events, method = "exact")
-data.frame(
-  events = events,
-  lower = round(limits$lower, 1),
-  upper = round(limits$upper, 1),
-  below_estimate = sprintf("%.0f%%", 100 * (limits$lower / events - 1)),
-  above_estimate = sprintf("+%.0f%%", 100 * (limits$upper / events - 1))
-)
+tibble(events = c(1, 2, 5, 10, 20, 50, 100, 500)) |>
+  mutate(
+    islh_ci_poisson(events, method = "exact") |> select(lower, upper),
+    below_estimate = sprintf("%.0f%%", 100 * (lower / events - 1)),
+    above_estimate = sprintf("+%.0f%%", 100 * (upper / events - 1)),
+    across(c(lower, upper), \(x) round(x, 1))
+  )
 ```
 
 With 10 events, the true value could plausibly be half the estimate or nearly
@@ -121,8 +147,9 @@ headlines.
 ## 2. Ranking areas: the league table trap
 
 A table or map that sorts areas by rate invites the reader to ask what is going
-wrong at the top and right at the bottom. Small areas almost always fill both
-ends, whatever the true rates are.
+wrong at the top and right at the bottom. When the areas' underlying rates are
+similar, small areas tend to fill both ends, because their rates vary most by
+chance.
 
 To show this, give every LHA exactly the same underlying rate, 50 per 100,000
 per year, and simulate one year of cases:
@@ -130,26 +157,24 @@ per year, and simulate one year of cases:
 ```{r league-table}
 set.seed(61)
 true_rate <- 50
-lha$cases <- stats::rpois(nrow(lha), lha$population * true_rate / 1e5)
 
-league <- cbind(
-  lha["lha"],
-  islh_crude_rate(lha$cases, lha$population)[
-    c("cases", "population", "rate", "lower", "upper")
-  ]
-)
-league <- league[order(-league$rate), ]
-rownames(league) <- NULL
-league$rate <- round(league$rate, 1)
-league$lower <- round(league$lower, 1)
-league$upper <- round(league$upper, 1)
-league
+league <- lha |>
+  mutate(
+    cases = stats::rpois(n(), population * true_rate / 1e5),
+    islh_crude_rate(cases, population) |> select(rate, lower, upper)
+  ) |>
+  arrange(desc(rate))
+
+league |>
+  mutate(across(c(rate, lower, upper), \(x) round(x, 1)))
 ```
 
 ```{r league-facts, include=FALSE}
-top <- league[1, ]
-bottom <- league[nrow(league), ]
-covered <- sum(league$lower <= true_rate & league$upper >= true_rate)
+top <- league |> slice_head(n = 1)
+bottom <- league |> slice_tail(n = 1)
+covered <- league |>
+  filter(lower <= true_rate, upper >= true_rate) |>
+  nrow()
 fold <- round(top$rate / bottom$rate)
 league_alt <- sprintf(
   paste(
@@ -167,20 +192,20 @@ league_alt <- sprintf(
 )
 ```
 
-Sorted by rate, `r top$lha` comes first at `r top$rate` per 100,000, from
-`r top$cases` cases. `r bottom$lha` comes last at `r bottom$rate`, from
-`r bottom$cases` case. That is a `r round(top$rate / bottom$rate)`-fold gap
-between two areas with identical risk, produced by chance alone.
+Sorted by rate, `r top$lha` comes first at `r round(top$rate, 1)` per 100,000,
+from `r top$cases` cases. `r bottom$lha` comes last at
+`r round(bottom$rate, 1)`, from `r bottom$cases` case. That is a
+`r fold`-fold gap between two areas with identical risk, produced by chance
+alone.
 
 The intervals tell the real story. `r if (covered == nrow(league)) "All 14" else paste(covered, "of the 14")`
 intervals contain the true rate of 50. The two areas at the extremes are among
 the smallest, and their intervals are among the widest.
 
 ```{r league-plot, eval=has_plots, fig.height=5.5, fig.alt=league_alt}
-ranked <- league
-ranked$lha <- factor(ranked$lha, levels = rev(ranked$lha))
-
-ggplot2::ggplot(ranked, ggplot2::aes(x = rate, y = lha)) +
+league |>
+  mutate(lha = factor(lha, levels = rev(lha))) |>
+  ggplot2::ggplot(ggplot2::aes(x = rate, y = lha)) +
   ggplot2::geom_vline(
     xintercept = true_rate,
     linetype = "dashed",
@@ -193,7 +218,7 @@ ggplot2::ggplot(ranked, ggplot2::aes(x = rate, y = lha)) +
   ggplot2::annotate(
     "text",
     x = true_rate,
-    y = nrow(ranked) + 0.9,
+    y = nrow(league) + 0.9,
     label = "True rate in every area",
     hjust = -0.05,
     size = 3.5
@@ -219,16 +244,24 @@ narrows as the population grows, because larger areas vary less.
 
 An area outside the funnel deserves a closer look. An area inside it does not
 stand out from the rest, however high it sits in a ranked list. Draw two
-funnels: the 95% limits, which about 1 area in 20 crosses by chance, and the
-99.8% limits, which about 1 in 500 crosses (Spiegelhalter 2005).
+funnels: 95% limits and 99.8% limits (Spiegelhalter 2005). The levels are
+nominal. Counts are whole numbers, the limits are interpolated between them,
+and the funnel's centre is itself estimated from the same areas, so the
+chance of an area crossing them is close to, but not exactly, 1 in 20 and
+1 in 500.
 
-This demonstration builds in the funnel's assumptions: every area shares one
-underlying rate, and counts vary as Poisson counts do. Real comparisons need
-more care. Areas differ in age structure, so compare standardized rates; real
-counts often vary more than Poisson counts (overdispersion), which widens the
-funnel; and the overall rate is itself an estimate. Being outside the funnel
-warrants review. It does not establish poor performance, and it does not
-explain why.
+This is a **crude-rate Poisson funnel**. Its limits treat each area's count
+as Poisson, with expected cases equal to the population times the pooled
+crude rate. That suits this simulation, where every area shares one
+underlying rate. It does not suit areas whose age structures differ, and
+standardized rates cannot simply be put in its place: a standardized rate's
+precision depends on each age group's population, rate and weight, not on
+the total population, so these limits would be wrong for it. The next
+section shows the standard route for age-adjusted comparisons.
+
+Real counts often vary more than Poisson counts, which widens the funnel, and
+the overall rate is itself an estimate. Being outside the funnel warrants
+review. It does not establish poor performance, and it does not explain why.
 
 Poisson counts are whole numbers, so funnel limits read straight from
 `stats::qpois()` jump in steps. Spiegelhalter (2005) interpolates between the
@@ -241,28 +274,36 @@ funnel_limit <- function(p, expected) {
   pmax(r - step, 0)
 }
 
-overall <- sum(lha$cases) / sum(lha$population) * 1e5
+overall <- sum(league$cases) / sum(league$population) * 1e5
 
-funnel <- data.frame(
-  population = exp(seq(log(1500), log(300000), length.out = 300))
-)
-expected <- funnel$population * overall / 1e5
-for (p in c(0.001, 0.025, 0.975, 0.999)) {
-  funnel[[paste0("p", p)]] <- funnel_limit(p, expected) / funnel$population * 1e5
+# Limits for a rate per 100,000, given each population.
+rate_limits <- function(population, overall) {
+  expected <- population * overall / 1e5
+  tibble(
+    lower_998 = funnel_limit(0.001, expected),
+    lower_95 = funnel_limit(0.025, expected),
+    upper_95 = funnel_limit(0.975, expected),
+    upper_998 = funnel_limit(0.999, expected)
+  ) |>
+    mutate(across(everything(), \(x) x / population * 1e5))
 }
 
-inside <- league$rate >= stats::approx(
-  funnel$population, funnel$p0.025, league$population
-)$y &
-  league$rate <= stats::approx(
-    funnel$population, funnel$p0.975, league$population
-  )$y
-sum(inside)
+funnel <- tibble(
+  population = exp(seq(log(1500), log(300000), length.out = 300))
+) |>
+  mutate(rate_limits(population, overall))
+
+league_check <- league |>
+  mutate(
+    rate_limits(population, overall),
+    inside = between(rate, lower_95, upper_95)
+  )
+sum(league_check$inside)
 ```
 
 ```{r funnel-facts, include=FALSE}
 # The plot title and description claim every area is inside the funnel.
-stopifnot(all(inside))
+stopifnot(all(league_check$inside))
 funnel_alt <- sprintf(
   paste(
     "Funnel plot of crude rate per 100,000 against population on a log scale",
@@ -275,33 +316,16 @@ funnel_alt <- sprintf(
   round(overall),
   top$lha, round(top$rate), bottom$lha, round(bottom$rate)
 )
+limit_colour <- if (has_plots) islandbrand::islh_hex("grey", 45)
 ```
 
 ```{r funnel-plot, eval=has_plots, fig.alt=funnel_alt}
-limit_colour <- islandbrand::islh_hex("grey", 45)
-extremes <- league[c(1, nrow(league)), ]
-
-ggplot2::ggplot(funnel, ggplot2::aes(x = population)) +
-  ggplot2::geom_line(
-    ggplot2::aes(y = p0.001),
-    linetype = "dotted",
-    colour = limit_colour
-  ) +
-  ggplot2::geom_line(
-    ggplot2::aes(y = p0.999),
-    linetype = "dotted",
-    colour = limit_colour
-  ) +
-  ggplot2::geom_line(
-    ggplot2::aes(y = p0.025),
-    linetype = "dashed",
-    colour = limit_colour
-  ) +
-  ggplot2::geom_line(
-    ggplot2::aes(y = p0.975),
-    linetype = "dashed",
-    colour = limit_colour
-  ) +
+funnel |>
+  ggplot2::ggplot(ggplot2::aes(x = population)) +
+  ggplot2::geom_line(ggplot2::aes(y = lower_998), linetype = "dotted", colour = limit_colour) +
+  ggplot2::geom_line(ggplot2::aes(y = upper_998), linetype = "dotted", colour = limit_colour) +
+  ggplot2::geom_line(ggplot2::aes(y = lower_95), linetype = "dashed", colour = limit_colour) +
+  ggplot2::geom_line(ggplot2::aes(y = upper_95), linetype = "dashed", colour = limit_colour) +
   ggplot2::geom_hline(yintercept = overall, colour = limit_colour) +
   ggplot2::geom_point(
     data = league,
@@ -310,7 +334,7 @@ ggplot2::ggplot(funnel, ggplot2::aes(x = population)) +
     size = 2.5
   ) +
   ggplot2::geom_text(
-    data = extremes,
+    data = bind_rows(top, bottom),
     ggplot2::aes(y = rate, label = lha),
     hjust = -0.12,
     size = 3.5
@@ -322,49 +346,200 @@ ggplot2::ggplot(funnel, ggplot2::aes(x = population)) +
     x = "Population (log scale)",
     y = "Cases per 100,000",
     title = "Every area sits inside the funnel",
-    caption = "Dashed: 95% limits. Dotted: 99.8% limits. Simulated cases."
+    caption = "Crude rates. Dashed: 95% limits. Dotted: 99.8% limits. Simulated cases."
   )
 ```
 
-## 3. "Up 57% on last year"
+### Areas with different age structures
+
+Most conditions are far more common at older ages, and Island Health's areas
+differ in age: some have twice the share of people aged 65 and over that
+others have. Crude rates then differ even when the risk at every age is the
+same.
+
+The usual route for a funnel is indirect standardization (Spiegelhalter
+2005). Apply one set of age-specific reference rates to each area's own
+population to get its *expected* count. Plot the ratio of observed to
+expected cases against the expected count, and draw the Poisson limits for
+the observed count around a ratio of 1. The expected count, not the
+population, sets each area's precision.
+
+The simulation below uses the real age structure of every LHA from
+`islh_lha_population` and gives every area the *same* rate at each age,
+rising steeply with age:
+
+```{r by-age}
+age_rates <- islh_lha_population |>
+  distinct(age_group) |>
+  mutate(
+    from_age = as.numeric(sub("[-+].*", "", age_group)),
+    rate = 10 * exp(0.05 * from_age)
+  )
+
+set.seed(111)
+by_age <- islh_lha_population |>
+  summarise(population = sum(population), .by = c(geography_name, age_group)) |>
+  inner_join(
+    age_rates,
+    by = join_by(age_group),
+    relationship = "many-to-one",
+    unmatched = "error"
+  ) |>
+  mutate(cases = stats::rpois(n(), population * rate / 1e5))
+
+# Reference rates: Island Health's own rate at each age.
+reference_rates <- by_age |>
+  summarise(reference_rate = sum(cases) / sum(population), .by = age_group)
+
+areas <- by_age |>
+  inner_join(reference_rates, by = join_by(age_group)) |>
+  # summarise() reads each new column in the expressions after it, so the
+  # area's total population comes last.
+  summarise(
+    aged_65_plus = sum(population[from_age >= 65]) / sum(population),
+    observed = sum(cases),
+    expected = sum(population * reference_rate),
+    population = sum(population),
+    .by = geography_name
+  ) |>
+  mutate(
+    crude_rate = observed / population * 1e5,
+    ratio = observed / expected
+  )
+
+crude_overall <- sum(areas$observed) / sum(areas$population) * 1e5
+areas <- areas |>
+  mutate(
+    crude_outside = !between(
+      crude_rate,
+      funnel_limit(0.025, population * crude_overall / 1e5) / population * 1e5,
+      funnel_limit(0.975, population * crude_overall / 1e5) / population * 1e5
+    ),
+    ratio_outside = !between(
+      ratio,
+      funnel_limit(0.025, expected) / expected,
+      funnel_limit(0.975, expected) / expected
+    )
+  )
+
+areas |>
+  select(geography_name, aged_65_plus, crude_rate, ratio, crude_outside, ratio_outside) |>
+  arrange(desc(aged_65_plus)) |>
+  mutate(across(c(aged_65_plus, ratio), \(x) round(x, 2)), crude_rate = round(crude_rate))
+```
+
+```{r by-age-facts, include=FALSE}
+crude_flagged <- sum(areas$crude_outside)
+ratio_flagged <- sum(areas$ratio_outside)
+ratio_alt <- sprintf(
+  paste(
+    "Funnel plot of the ratio of observed to expected cases against the",
+    "expected count on a log scale for the 14 local health areas, with a",
+    "solid line at a ratio of 1 and dashed 95%% and dotted 99.8%% limits that",
+    "narrow as the expected count grows. %s of the 14 areas fall outside the",
+    "95%% limits."
+  ),
+  if (ratio_flagged == 0) "None" else ratio_flagged
+)
+```
+
+Against a crude-rate funnel, `r crude_flagged` of the 14 areas fall outside
+the 95% limits, the older areas above and the younger ones below, although
+every area has the same risk at every age. Against the age-standardized
+funnel, `r if (ratio_flagged == 0) "none does" else paste(ratio_flagged, "do")`.
+
+```{r ratio-funnel, eval=has_plots, fig.alt=ratio_alt}
+ratio_funnel <- tibble(
+  expected = exp(seq(
+    log(0.8 * min(areas$expected)),
+    log(1.25 * max(areas$expected)),
+    length.out = 300
+  ))
+) |>
+  mutate(
+    lower_998 = funnel_limit(0.001, expected) / expected,
+    lower_95 = funnel_limit(0.025, expected) / expected,
+    upper_95 = funnel_limit(0.975, expected) / expected,
+    upper_998 = funnel_limit(0.999, expected) / expected
+  )
+
+ratio_funnel |>
+  ggplot2::ggplot(ggplot2::aes(x = expected)) +
+  ggplot2::geom_line(ggplot2::aes(y = lower_998), linetype = "dotted", colour = limit_colour) +
+  ggplot2::geom_line(ggplot2::aes(y = upper_998), linetype = "dotted", colour = limit_colour) +
+  ggplot2::geom_line(ggplot2::aes(y = lower_95), linetype = "dashed", colour = limit_colour) +
+  ggplot2::geom_line(ggplot2::aes(y = upper_95), linetype = "dashed", colour = limit_colour) +
+  ggplot2::geom_hline(yintercept = 1, colour = limit_colour) +
+  ggplot2::geom_point(
+    data = areas,
+    ggplot2::aes(y = ratio),
+    colour = islandbrand::islh_brand("primary"),
+    size = 2.5
+  ) +
+  ggplot2::scale_x_log10() +
+  ggplot2::labs(
+    x = "Expected cases (log scale)",
+    y = "Observed / expected",
+    title = "Age-standardized, every area is within the limits",
+    caption = paste(
+      "Indirectly standardized to Island Health's age-specific rates; simulated cases.",
+      "Dashed: 95% limits. Dotted: 99.8% limits.",
+      sep = "\n"
+    )
+  )
+```
+
+The ratio of observed to expected cases is an indirectly standardized ratio.
+It compares each area with the reference rates, not one area with another.
+To compare two areas directly, use directly standardized rates and the ratio
+method in the next section.
+
+## 3. Comparing two rates
+
+### Crude rates: "Up 57% on last year"
 
 Suppose the Comox Valley had 14 cases last year and 22 this year, with no
 change in population. A headline might read "Cases up 57%".
 
-Compare two rates with a rate ratio and the interval for that ratio. Base R's
-`stats::poisson.test()` gives the exact interval for the ratio of two Poisson
-rates, conditional on their total (Breslow and Day 1987). Put the later period,
-or the group of interest, first:
+Compare two rates with a rate ratio and the interval for that ratio.
+`islh_rate_ratio()` gives the exact interval for the ratio of two Poisson
+rates, conditional on their total (Breslow and Day 1987); it is the interval
+`stats::poisson.test()` gives, and it works across the rows of a table. Put
+the later period, or the group of interest, first:
 
 ```{r small-change}
-comox <- data.frame(year = c(2024, 2025), cases = c(14, 22), population = 80091)
-cbind(
-  comox["year"],
-  round(islh_crude_rate(comox$cases, comox$population)[
-    c("cases", "rate", "lower", "upper")
-  ], 1)
-)
+comox <- tibble(year = c(2024, 2025), cases = c(14, 22), population = 80091)
 
-change <- stats::poisson.test(
-  x = rev(comox$cases),
-  T = rev(comox$population)
+comox |>
+  mutate(
+    islh_crude_rate(cases, population) |> select(rate, lower, upper),
+    across(c(rate, lower, upper), \(x) round(x, 1))
+  )
+
+comox_change <- islh_rate_ratio(
+  cases = 22,
+  population = 80091,
+  reference_cases = 14,
+  reference_population = 80091
 )
-round(c(
-  ratio = unname(change$estimate),
-  lower = change$conf.int[1],
-  upper = change$conf.int[2]
-), 2)
+comox_change |>
+  select(ratio, lower, upper) |>
+  round(2)
 ```
 
-Reported cases did rise, from 14 to 22, and a report can say so. The question
-the interval answers is different: did the underlying risk rise? The ratio is
-`r round(change$estimate, 2)`, but its interval runs from
-`r round(change$conf.int[1], 2)` to `r round(change$conf.int[2], 2)`. The data
-are compatible with anything from an underlying rate about a quarter lower to
-one more than three times higher.
+Reported cases did rise, from 14 to 22, and a report can say so. The rate
+ratio, `r round(comox_change$ratio, 2)`, estimates how much the underlying rate
+of reported cases changed, and its interval, `r round(comox_change$lower, 2)` to
+`r round(comox_change$upper, 2)`, says how precisely. This is an increase
+estimated very imprecisely: the counts are compatible with an underlying rate
+about a quarter lower than last year's, with one more than three times as
+high, and with everything between.
 
-Report the counts, the ratio and its interval. Describe the rise in cases as a
-rise in cases, and do not present it as evidence that the risk changed.
+Report the counts, the ratio and its interval, and describe it that way. An
+interval that contains 1 does not show that nothing changed, and one that
+excludes 1 does not prove a change occurred (Greenland et al. 2016). The
+interval describes the size of the change the data support, under the
+model.
 
 ### Overlapping intervals can still hide a real change
 
@@ -372,37 +547,30 @@ The opposite mistake is just as common. Suppose Greater Nanaimo went from 160
 cases to 205:
 
 ```{r overlap}
-nanaimo <- data.frame(
-  year = c(2024, 2025),
-  cases = c(160, 205),
-  population = 133395
-)
-nanaimo_rates <- islh_crude_rate(nanaimo$cases, nanaimo$population)
-cbind(
-  nanaimo["year"],
-  round(nanaimo_rates[c("cases", "rate", "lower", "upper")], 1)
-)
+nanaimo <- tibble(year = c(2024, 2025), cases = c(160, 205), population = 133395) |>
+  mutate(islh_crude_rate(cases, population) |> select(rate, lower, upper))
 
-change <- stats::poisson.test(
-  x = rev(nanaimo$cases),
-  T = rev(nanaimo$population)
-)
-round(c(
-  ratio = unname(change$estimate),
-  lower = change$conf.int[1],
-  upper = change$conf.int[2]
-), 2)
+nanaimo |>
+  mutate(across(c(rate, lower, upper), \(x) round(x, 1)))
+
+nanaimo_change <- islh_rate_ratio(205, 133395, 160, 133395)
+nanaimo_change |>
+  select(ratio, lower, upper) |>
+  round(2)
 ```
 
-The two intervals overlap: 2024's runs up to `r round(nanaimo_rates$upper[1])`
-and 2025's starts at `r round(nanaimo_rates$lower[2])`. It is tempting to read
+The two intervals overlap: 2024's runs up to `r round(nanaimo$upper[1])`
+and 2025's starts at `r round(nanaimo$lower[2])`. It is tempting to read
 that overlap as "no change", and it would be wrong. The interval for the
-ratio, `r round(change$conf.int[1], 2)` to `r round(change$conf.int[2], 2)`,
-excludes 1: under the Poisson model, these counts are not compatible with an
-unchanged underlying rate.
+ratio, `r round(nanaimo_change$lower, 2)` to `r round(nanaimo_change$upper, 2)`,
+lies above 1. Under the Poisson model, these counts support an increase in the
+underlying rate of reported cases, of somewhere between about
+`r round(100 * (nanaimo_change$lower - 1))`% and
+`r round(100 * (nanaimo_change$upper - 1))`%.
 
-That is evidence the rate changed, not of why. A change in testing, coding or
-case definitions would produce the same pattern.
+That is evidence the reported rate changed, not of why. A change in testing,
+coding or case definitions would produce the same pattern, and clustering of
+cases would make the true interval wider than this one.
 
 Two 95% intervals can overlap even when the difference between the estimates is
 clear (Schenker and Gentleman 2001). Compare two estimates with the interval
@@ -411,37 +579,108 @@ For two independent estimates like these, the reverse does hold: when their
 95% intervals do not overlap at all, the difference is clear at an even
 stricter level than 5%.
 
+### Standardized rates need their own ratio
+
+A directly standardized rate is a weighted sum of age-specific rates. Its
+uncertainty comes from each age group's count, population and weight, so it
+cannot be recovered from the total cases and total population. Comparing
+those totals with `islh_rate_ratio()` or `stats::poisson.test()` compares the
+crude rates, whatever the rates on the page say.
+
+`islh_dsr_ratio()` compares two rates from `islh_dsr()` or
+`islh_dsr_joined()` with Fay's F interval, built for standardized rates
+(Fay 1999). It extends the Fay and Feuer interval those functions give
+(Fay and Feuer 1997). Here are two areas from the simulation above, with
+the same risk at every age but very different age structures:
+
+```{r dsr-ratio}
+standard <- islh_standard_population("canada_2011")
+
+standardized_rate <- function(area) {
+  area_by_age <- by_age |> filter(geography_name == area)
+  islh_dsr_joined(
+    events = area_by_age |> select(age_group, cases),
+    population = area_by_age |> select(age_group, population),
+    standard = standard,
+    by = "age_group",
+    standard_id = standard$standard_id[1]
+  )
+}
+
+oceanside <- standardized_rate("Oceanside")
+western <- standardized_rate("Western Communities")
+
+crude_ratio <- islh_rate_ratio(
+  oceanside$cases,
+  oceanside$population,
+  western$cases,
+  western$population
+)
+standardized_ratio <- islh_dsr_ratio(oceanside, western)
+
+bind_rows(crude = crude_ratio, standardized = standardized_ratio, .id = "rates") |>
+  select(rates, ratio, lower, upper, method) |>
+  mutate(across(c(ratio, lower, upper), \(x) round(x, 2)))
+```
+
+```{r dsr-facts, include=FALSE}
+share_old <- areas |>
+  filter(geography_name %in% c("Oceanside", "Western Communities")) |>
+  select(geography_name, aged_65_plus)
+```
+
+Oceanside's population is `r round(100 * share_old$aged_65_plus[share_old$geography_name == "Oceanside"])`%
+aged 65 and over, the Western Communities' only
+`r round(100 * share_old$aged_65_plus[share_old$geography_name == "Western Communities"])`%.
+The crude ratio, `r round(crude_ratio$ratio, 2)`, is the difference in age
+structure. The standardized ratio, `r round(standardized_ratio$ratio, 2)`
+(`r round(standardized_ratio$lower, 2)` to `r round(standardized_ratio$upper, 2)`),
+removes it, and its interval is wider because the comparison now rests on
+the age groups separately.
+
+Both rates must use the same standard population, and their counts must be
+independent: different areas, or one area in two separate periods. An area
+and a region that contains it share cases, so they cannot be compared this
+way.
+
 ## 4. Percentages and targets
 
 Proportions behave the same way. `islh_proportion()` uses the Wilson score
-interval (Wilson 1927), which stays between 0 and 100% and behaves well for
-small denominators. Suppose the target is to reach 90% of new cases within 24
-hours:
+interval (Wilson 1927), which stays between 0 and 100% and, for small
+denominators, comes close to the nominal coverage on average. It does not
+reach it for every case: with 20 cases and a true proportion of 5%, a nominal
+95% Wilson interval covers about 92.5% of the time. `method = "exact"`, the
+Clopper-Pearson interval, never falls below the nominal level, and is wider
+for it (Brown, Cai and DasGupta 2001). Suppose the target is to reach 90% of
+new cases within 24 hours:
 
 ```{r proportions}
-follow_up <- data.frame(
+follow_up <- tibble(
   team = c("Small team", "Large team", "Small team, next quarter"),
   reached = c(18, 1710, 19),
   cases = c(20, 1900, 20)
-)
-share <- islh_proportion(follow_up$reached, follow_up$cases, per = 100)
-cbind(
-  follow_up["team"],
-  round(share[c("x", "n", "proportion", "lower", "upper")], 1)
-)
+) |>
+  mutate(
+    islh_proportion(reached, cases, per = 100) |>
+      select(proportion, lower, upper)
+  )
+
+follow_up |>
+  mutate(across(c(proportion, lower, upper), \(x) round(x, 1)))
 ```
 
 Both teams reached 90%. The large team's interval is under 3 points wide, so
 its performance is known closely. The small team's runs from
-`r round(share$lower[1])` to `r round(share$upper[1])`.
+`r round(follow_up$lower[1])` to `r round(follow_up$upper[1])`.
 
 The next quarter, the small team reaches 19 of 20, or 95%. As a description
 of that quarter, the result exceeded the 90% target, and a report can say so.
 
 Whether the team's ongoing performance now exceeds 90% is a different
-question. The interval, `r round(share$lower[3])` to `r round(share$upper[3])`,
-is compatible with an underlying rate well below 90%, so these data do not
-establish it. One more or one fewer case reached moves the result by 5 points.
+question. The interval, `r round(follow_up$lower[3])` to
+`r round(follow_up$upper[3])`, is compatible with an underlying rate well
+below 90%, so these data do not establish it. One more or one fewer case
+reached moves the result by 5 points.
 
 Decide in the reporting policy which of the two statements a target is about.
 When it is about ongoing performance, check where the interval sits, not just
@@ -460,15 +699,14 @@ format_interval <- function(estimate, lower, upper, digits = 1) {
   sprintf("%s (%s to %s)", fmt(estimate), fmt(lower), fmt(upper))
 }
 
-published <- data.frame(
-  lha = league$lha,
-  cases = league$cases,
-  rate = format_interval(league$rate, league$lower, league$upper)
-)
-names(published)[3] <- "Rate per 100,000 (95% CI)"
-published <- published[order(published$lha), ]
-rownames(published) <- NULL
-head(published, 5)
+league |>
+  arrange(lha) |>
+  transmute(
+    LHA = lha,
+    Cases = cases,
+    `Rate per 100,000 (95% CI)` = format_interval(rate, lower, upper)
+  ) |>
+  slice_head(n = 5)
 ```
 
 Sort tables of areas alphabetically or geographically, not by rate. Put the
@@ -497,11 +735,11 @@ State the estimate with its interval at first mention:
 > 102.3).
 
 For a comparison, report the ratio or difference, its interval and the counts
-behind it:
+behind it, and say what the interval shows rather than whether it crosses 1:
 
 > Comox Valley reported 22 cases in 2025, up from 14 in 2024. The rate ratio
-> was 1.57 (95% CI 0.77 to 3.32), so these data cannot show whether the
-> underlying rate rose or fell.
+> was 1.57 (95% CI 0.77 to 3.32): an increase, estimated too imprecisely to
+> say how large it is, or to rule out a fall.
 
 For audiences outside epidemiology, one sentence is enough:
 
@@ -516,23 +754,37 @@ sentence above does not need it.
 
 Standardized rates need intervals as much as crude rates, and theirs are often
 wider, because a few sparse age bands with large weights can dominate. Use
-`islh_dsr()` or `islh_dsr_joined()` with the default Fay-Feuer interval, and
-`islh_dsr_detail()` to see which age bands make the interval wide. The
+`islh_dsr()` or `islh_dsr_joined()` with the default Fay-Feuer interval,
+`islh_dsr_detail()` to see which age bands make the interval wide, and
+`islh_dsr_ratio()` to compare two of them. The
 [Getting started](islandepi.html#directly-standardized-rates) article has a
 worked example.
 
+The Fay-Feuer interval is conservative by design: it usually covers more
+often than its nominal level. Tools built on Dobson's method, such as the
+Fingertips profiles, give somewhat narrower intervals, so the two will not
+match exactly (Eayres 2008).
+
 ## What an interval does not cover
 
-A confidence interval describes chance variation in the count. It does not
-cover:
+A confidence interval describes chance variation in the count, under the
+model. It does not cover:
 
 - under-reporting, or changes in testing, case definitions or coding;
 - cases not yet reported for recent periods, which
   `islh_reporting_completeness()` estimates;
 - errors in the population denominator;
+- extra variation from clustered or recurrent events, beyond what a Poisson
+  count has;
 - the extra chance findings that come from making many comparisons at once.
-  With 14 areas and 95% intervals, expect about one area in 20 to look
-  unusual by chance in any given year.
+
+On the last point: compare each of 14 areas with the overall rate at the 95%
+level, and about 0.7 areas are expected to look unusual by chance alone in a
+year, with about a 51% chance that at least one does. That assumes the 14
+comparisons are independent and each has exactly a 5% chance of a false
+alarm. With whole-number counts the actual chances differ a little, and
+comparisons against an overall rate that includes the area are not quite
+independent.
 
 When these matter, say so beside the interval rather than leaving the reader
 to assume the interval covers them.
@@ -542,9 +794,13 @@ to assume the interval covers them.
 - Give every rate, proportion and standardized rate its 95% interval, in
   tables, figures and text.
 - Compare two estimates with the interval for their ratio or difference, not by
-  eye and not by whether their intervals overlap.
+  eye and not by whether their intervals overlap. Use `islh_rate_ratio()` for
+  crude rates and `islh_dsr_ratio()` for standardized rates.
+- Describe the estimate, its interval and the model behind it. Do not turn the
+  interval into a yes-or-no test of whether it crosses 1.
 - Do not rank small areas by their point estimates. Use a funnel plot, or sort
-  by name or geography and show the intervals.
+  by name or geography and show the intervals. Standardize the funnel when
+  age structures differ.
 - Before saying a result meets, exceeds or misses a target, be clear whether
   the statement is about the period observed or about ongoing performance.
   For ongoing performance, check where the interval sits.
@@ -561,9 +817,29 @@ Breslow NE, Day NE (1987). *Statistical Methods in Cancer Research, Volume
 II: The Design and Analysis of Cohort Studies*. IARC Scientific Publications
 No. 82. Lyon: International Agency for Research on Cancer.
 
+Brown LD, Cai TT, DasGupta A (2001). Interval estimation for a binomial
+proportion. *Statistical Science* 16(2):101-133.
+<https://doi.org/10.1214/ss/1009213286>
+
 Eayres D (2008). *Technical Briefing 3: Commonly used public health statistics
 and their confidence intervals*. York: Association of Public Health
 Observatories.
+
+Fay MP (1999). Approximate confidence intervals for rate ratios from directly
+standardized rates with sparse data. *Communications in Statistics - Theory
+and Methods* 28(9):2141-2160.
+
+Fay MP, Feuer EJ (1997). Confidence intervals for directly standardized rates:
+a method based on the gamma distribution. *Statistics in Medicine*
+16(7):791-801.
+
+Garwood F (1936). Fiducial limits for the Poisson distribution. *Biometrika*
+28(3-4):437-442.
+
+Greenland S, Senn SJ, Rothman KJ, Carlin JB, Poole C, Goodman SN, Altman DG
+(2016). Statistical tests, P values, confidence intervals, and power: a guide
+to misinterpretations. *European Journal of Epidemiology* 31(4):337-350.
+<https://doi.org/10.1007/s10654-016-0149-3>
 
 Schenker N, Gentleman JF (2001). On judging the significance of differences by
 examining the overlap between confidence intervals. *The American
@@ -571,6 +847,7 @@ Statistician* 55(3):182-186.
 
 Spiegelhalter DJ (2005). Funnel plots for comparing institutional
 performance. *Statistics in Medicine* 24(8):1185-1202.
+<https://doi.org/10.1002/sim.1970>
 
 Wilson EB (1927). Probable inference, the law of succession, and statistical
 inference. *Journal of the American Statistical Association*
