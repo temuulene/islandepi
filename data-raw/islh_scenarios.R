@@ -2,7 +2,9 @@
 # teach:
 #
 # * islh_seasons: seven seasons of weekly counts by HSDA, for matched
-#   seasonal baselines, including an unusually quiet 2020-21 season.
+#   seasonal baselines, including an unusually quiet 2020-21 season. The
+#   2025-26 season is not simulated here: it holds the final weekly counts of
+#   islh_outbreak by onset week, so the two datasets describe one season.
 # * islh_encounters: four weeks of encounter records in which some people
 #   come back on other days or to other sites, and a few records arrive twice.
 # * islh_feed_log: the daily file log for the same four weeks. One site's
@@ -15,9 +17,11 @@
 # Run with: Rscript data-raw/islh_scenarios.R (from the package root).
 
 devtools::load_all(quiet = TRUE)
-set.seed(20260930L)
 
 # islh_seasons --------------------------------------------------------------
+
+# Each dataset has its own seed, so changing one does not move the others.
+set.seed(20260930L)
 
 hsdas <- c(
   "South Vancouver Island",
@@ -37,19 +41,21 @@ season <- season_of(weeks)
 seasons <- sort(unique(season))
 
 # Each season peaks between early December and early February, at its own
-# height. 2020-21 barely rises, like a season disrupted by public health
+# height, on the same scale as the 2025-26 outbreak: a winter wave of roughly
+# 60 to 130 cases a week across Island Health at its peak, and very few cases
+# outside it. 2020-21 barely rises, like a season disrupted by public health
 # measures, so the examples can show why it should be excluded.
 peak_week <- as.Date(sprintf("%d-12-01", seasons)) +
   sample(7 * (0:9), length(seasons), replace = TRUE)
-peak_height <- stats::runif(length(seasons), 150, 260)
-peak_height[seasons == 2020] <- 12
+peak_height <- stats::runif(length(seasons), 60, 130)
+peak_height[seasons == 2020] <- 6
 
 expected <- vapply(
   seq_along(weeks),
   function(i) {
     s <- match(season[i], seasons)
     distance <- as.numeric(weeks[i] - peak_week[s]) / 7
-    8 + peak_height[s] * exp(-distance^2 / (2 * 4^2))
+    1 + peak_height[s] * exp(-distance^2 / (2 * 4^2))
   },
   numeric(1)
 )
@@ -64,6 +70,33 @@ raw <- data.frame(
   week = weeks[grid$week],
   count = counts
 )
+
+# The 2025-26 season is the outbreak itself: its final line list counted by
+# week of onset. The draws above are still made for those weeks, so the
+# random numbers that follow, and the datasets built from them, do not move.
+current_from <- as.Date("2025-09-01")
+current <- islh_count_events(
+  islh_outbreak,
+  date = date_onset,
+  id = case_id,
+  by = hsda,
+  interval = "week",
+  week_start = 1,
+  from = current_from,
+  to = max(weeks) + 6,
+  fill = TRUE,
+  groups = hsdas
+)
+in_current <- raw$week >= current_from
+raw$count[in_current] <- current$count[match(
+  paste(raw$hsda, raw$week)[in_current],
+  paste(current$hsda, current$period_start)
+)]
+stopifnot(
+  !anyNA(raw$count),
+  sum(raw$count[in_current]) == nrow(islh_outbreak)
+)
+
 islh_seasons <- islh_count_events(
   raw,
   date = week,
@@ -78,6 +111,8 @@ islh_seasons <- islh_count_events(
 rownames(islh_seasons) <- NULL
 
 # islh_encounters and islh_feed_log -------------------------------------------
+
+set.seed(20260803L)
 
 days <- seq(as.Date("2026-08-03"), as.Date("2026-08-30"), by = "day")
 sites <- c("Site A", "Site B", "Site C")

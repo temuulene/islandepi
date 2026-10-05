@@ -90,3 +90,35 @@ test_that("the feed log separates missing files from nil reports", {
   expect_true(any(log$site == "Site B" & log$records == 0))
   expect_equal(sum(log$records), nrow(islh_encounters))
 })
+
+test_that("the 2025-26 season is the outbreak counted by week of onset", {
+  current <- islh_seasons[islh_seasons$period_start >= as.Date("2025-09-01"), ]
+  expect_equal(sum(current$count), nrow(islh_outbreak))
+
+  onset_week <- islh_outbreak$date_onset -
+    (as.integer(format(islh_outbreak$date_onset, "%u")) - 1L)
+  from_line_list <- as.data.frame(
+    table(hsda = islh_outbreak$hsda, period_start = onset_week),
+    stringsAsFactors = FALSE
+  )
+  from_line_list$period_start <- as.Date(from_line_list$period_start)
+  matched <- merge(current, from_line_list, by = c("hsda", "period_start"))
+  expect_equal(matched$count, matched$Freq)
+  expect_equal(sum(current$count[current$count > 0]), sum(matched$Freq))
+})
+
+test_that("the LHA population covers every area, sex and age group", {
+  x <- islh_lha_population
+  expect_equal(nrow(x), 14L * 2L * 18L)
+  expect_setequal(unique(x$geography_code), unique(islh_outbreak$lha_code))
+  expect_equal(unique(x$year), 2025L)
+  expect_setequal(unique(x$sex), c("F", "M"))
+  expect_true(is.ordered(x$age_group))
+  expect_equal(nlevels(x$age_group), 18L)
+  expect_false(anyDuplicated(x[c("geography_code", "sex", "age_group")]) > 0)
+
+  # Totals match the 2025 populations used to place the outbreak's cases.
+  totals <- tapply(x$population, x$geography_name, sum)
+  expect_equal(unname(totals[["Greater Victoria"]]), 258999)
+  expect_equal(sum(x$population), 927705)
+})

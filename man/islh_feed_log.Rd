@@ -38,6 +38,6 @@ coverage <- islh_check_coverage(
   from = "2026-08-03",
   to = "2026-08-30"
 )
-coverage[!coverage$received, ]
+dplyr::filter(coverage, !received)
 }
 \keyword{datasets}

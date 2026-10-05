@@ -33,6 +33,11 @@ draws an outbreak as a branching process, so onsets, delays, ages and
 outcomes hang together. Cases are assigned to local health areas using BC
 Stats' 2025 population estimates. The script is \code{data-raw/islh_outbreak.R}
 in the package source.
+
+The final counts by week of onset are the 2025-26 season of
+\link{islh_seasons}, so the two datasets describe the same season. A report
+written during the season sees only the cases reported by then: filter on
+\code{date_reported} first, as the surveillance guide shows.
 }
 \usage{
 islh_outbreak
@@ -50,18 +55,24 @@ cases in Greater Victoria than in Vancouver Island West.
 outbreak, and the counts are not Island Health surveillance data.
 }
 \examples{
-head(islh_outbreak)
+library(dplyr)
 
-# Weekly counts by health service delivery area
-weekly <- islh_count_events(
-  islh_outbreak,
-  date = date_onset,
-  id = case_id,
-  by = hsda,
-  interval = "week",
-  from = "2025-11-03",
-  to = "2026-03-08"
-)
-head(weekly)
+islh_outbreak |>
+  select(case_id, age, sex, date_onset, date_reported, hsda)
+
+# The line list as it stood on 1 February 2026.
+known <- islh_outbreak |>
+  filter(date_reported <= as.Date("2026-02-01"))
+
+known |>
+  islh_count_events(
+    date = date_onset,
+    id = case_id,
+    by = hsda,
+    interval = "week",
+    from = "2025-11-03",
+    to = "2026-02-01"
+  ) |>
+  tail()
 }
 \keyword{datasets}

@@ -5,7 +5,7 @@
 \alias{islh_encounters}
 \title{Simulated encounters with repeat visits}
 \format{
-A data frame with 293 rows and 4 columns:
+A data frame with 332 rows and 4 columns:
 \describe{
 \item{encounter_id}{Encounter identifier. Three appear twice.}
 \item{person_id}{Person identifier. Many people have more than one
@@ -43,17 +43,17 @@ issues <- islh_check_events(
   date = encounter_date,
   max_date = "2026-08-30"
 )
-table(issues$.issue)
+dplyr::count(issues, .issue)
 
 # People, not encounters, per week.
-unique_encounters <- islh_encounters[!duplicated(islh_encounters), ]
-islh_count_events(
-  unique_encounters,
-  date = encounter_date,
-  id = person_id,
-  interval = "week",
-  from = "2026-08-03",
-  to = "2026-08-30"
-)
+islh_encounters |>
+  dplyr::distinct() |>
+  islh_count_events(
+    date = encounter_date,
+    id = person_id,
+    interval = "week",
+    from = "2026-08-03",
+    to = "2026-08-30"
+  )
 }
 \keyword{datasets}

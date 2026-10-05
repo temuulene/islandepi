@@ -16,21 +16,26 @@ A data frame with 1,095 rows, one per HSDA and week, as returned by
 }
 }
 \source{
-Simulated from a seasonal curve with gamma-Poisson noise, scaled by
-BC Stats' 2025 HSDA populations. The script is
+Seasons before 2025-26 are simulated from a seasonal curve with
+gamma-Poisson noise, scaled by BC Stats' 2025 HSDA populations; 2025-26
+is counted from \link{islh_outbreak}. The script is
 \code{data-raw/islh_scenarios.R} in the package source.
 }
 \usage{
 islh_seasons
 }
 \description{
-Weekly counts of a seasonal respiratory illness by health service delivery
-area, from September 2019 to August 2026. Each season peaks between early
-December and early February at its own height. The 2020-21 season barely
-rises, like a season disrupted by public health measures, so the examples
-can show why an unusual season is left out of a baseline.
+Weekly counts of a winter respiratory illness for each health service
+delivery area, from September 2019 to August 2026. Each season peaks
+between early December and early February at its own height. The 2020-21
+season barely rises, like a season disrupted by public health measures, so
+the examples can show why an unusual season is left out of a baseline.
 }
 \details{
+The 2025-26 season is \link{islh_outbreak}: its final line list counted by week
+of onset. The earlier seasons are simulated on the same scale, with
+extra-Poisson variation between weeks, as real counts have.
+
 Use it to build matched seasonal baselines with
 \code{\link[=islh_reference_periods]{islh_reference_periods()}} and \code{\link[=islh_surveillance_baseline]{islh_surveillance_baseline()}}, and to try
 \code{\link[=islh_compare_periods]{islh_compare_periods()}} and \code{\link[=islh_farrington]{islh_farrington()}}.
@@ -38,8 +43,17 @@ Use it to build matched seasonal baselines with
 \strong{Every count is simulated.} They are not Island Health surveillance data.
 }
 \examples{
+library(dplyr)
+
+# Season totals: 2020-21 is the quiet one.
+islh_seasons |>
+  mutate(
+    season = islh_reporting_calendar(period_start, season_start_month = 9)$season
+  ) |>
+  summarise(cases = sum(count), .by = season)
+
 reference <- islh_reference_periods(
-  "2026-01-26",
+  "2026-01-19",
   years_back = 5,
   window = 2,
   exclude = data.frame(from = "2020-09-01", to = "2021-08-31")
