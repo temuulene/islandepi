@@ -1,8 +1,29 @@
 # PHASE installation and pilot release
 
-Staff target: Windows with R 4.4.1. Use a writable user library and the
-approved Windows ZIPs. Do not install packages while knitting or rendering. Do
-not use pak on managed staff laptops.
+Staff target: Windows with R 4.4.1 and a writable user library. Do not
+install packages while knitting or rendering. Do not use pak on managed staff
+laptops.
+
+## From GitHub
+
+The simplest route installs both packages straight from GitHub. Restart R,
+then run:
+
+```r
+install.packages("remotes", type = "binary")
+remotes::install_github(
+  c("temuulene/islandepi", "temuulene/islandbrand"),
+  type = "binary", upgrade = "always", build = FALSE
+)
+```
+
+Dependencies arrive as CRAN Windows binaries and neither package has code to
+compile, so no Rtools, Git, GitHub account or token is needed. To install the
+approved pair rather than the latest code, add each release tag, for example
+`"temuulene/islandepi@vX.Y.Z"`. Rerun the command to update.
+
+Use the release files below instead when a laptop cannot reach GitHub, or when
+the deployment must match the dependency manifest exactly.
 
 ## What each release publishes
 
@@ -24,7 +45,7 @@ with `install-phase.R`, loaded, and used for a check calculation.
 The two are approved as a pair: the team lead records which `islandbrand`
 version goes with which `islandepi` version.
 
-## Installing
+## Installing from release files
 
 1. Confirm the approved `islandepi` and `islandbrand` versions with the team
    lead.

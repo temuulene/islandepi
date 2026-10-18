@@ -21,6 +21,21 @@ analysis. Every example on this page is evaluated when the website is built,
 so the printed values are actual package output. The examples use dplyr and
 tidyr, which `islandepi` installs with itself.
 
+To install it on Windows, restart R, then run:
+
+```{r install, eval=FALSE}
+install.packages("remotes", type = "binary")
+remotes::install_github(
+  "temuulene/islandepi",
+  type = "binary", upgrade = "always", build = FALSE
+)
+```
+
+No Rtools, Git, GitHub account or token is needed. The
+[README](https://github.com/temuulene/islandepi#installing) shows how to
+install `islandbrand` at the same time, a specific version, or the release
+files.
+
 ```{r packages}
 library(dplyr)
 library(tidyr)

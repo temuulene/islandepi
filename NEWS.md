@@ -54,6 +54,10 @@ First public release. It includes:
   baseline change what a signal means.
 * Examples and articles use dplyr and tidyr: `|>`, `.by`, `join_by()` and
   results spliced into `mutate()` and `summarise()`.
+* Staff can install directly from GitHub with one `remotes::install_github()`
+  command, alone or together with `islandbrand`. Dependencies arrive as
+  Windows binaries and no Rtools is needed; a check installs this way on
+  Windows without compiler tools.
 * Releases publish the standalone installer and a manifest of the dependency
   versions the Windows binary was built with, and test-install the binary into
   an empty library before publishing.

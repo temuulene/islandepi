@@ -20,20 +20,50 @@ For event-level reporting, see the evaluated
 
 ## Installing
 
-For staff, follow [the supported installation guide](inst/INSTALL.md). Each
-release on GitHub Releases publishes the Windows ZIP, the standalone installer
+On Windows, restart R, then run:
+
+```r
+install.packages("remotes", type = "binary")
+remotes::install_github(
+  "temuulene/islandepi",
+  type = "binary", upgrade = "always", build = FALSE
+)
+```
+
+This installs the latest version from GitHub. Its CRAN packages arrive as
+ready-made Windows binaries and `islandepi` has no code to compile, so you do
+not need Rtools, Git, a GitHub account or a token. Run the same commands again
+to update. A few functions need an optional package, such as `surveillance`
+for `islh_farrington()`; if one is missing, the error gives the command that
+installs it.
+
+To install [`islandbrand`](https://github.com/temuulene/islandbrand) at the
+same time, give both names:
+
+```r
+remotes::install_github(
+  c("temuulene/islandepi", "temuulene/islandbrand"),
+  type = "binary", upgrade = "always", build = FALSE
+)
+```
+
+If GitHub answers "API rate limit exceeded", many people on the same network
+have installed within the hour. Wait an hour, or use the release files below.
+
+### A specific version, or no access to GitHub
+
+To install a version your team has approved, add its tag from the
+[Releases page](https://github.com/temuulene/islandepi/releases) to the name,
+such as `"temuulene/islandepi@vX.Y.Z"`.
+
+Each release also publishes the Windows ZIP, the standalone installer
 `install-phase.R` and a manifest of the dependency versions it was built with.
-Run installation outside a report render.
+Release files appear only after release checks pass and the ZIP has been
+test-installed into an empty library. To install from them, without GitHub
+access or with exact dependency versions, follow
+[the release installation guide](inst/INSTALL.md).
 
-Release assets are created only after release checks pass and the Windows ZIP
-has been test-installed into an empty library. A version number in DESCRIPTION
-does not mean its ZIP has been published. The installer checks the package
-name and version against your requested version, then loads the package and
-runs a check calculation.
-
-Developers can install a reviewed commit using `remotes::install_github()` with
-an explicit `ref`. Record both package versions and `sessionInfo()` with every
-report.
+Record both package versions and `sessionInfo()` with every report.
 
 ## Choose the function
 
