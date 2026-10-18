@@ -16,8 +16,15 @@ jobs:
       fail-fast: false
       matrix:
         r: ['4.4.1', 'release']
+    env:
+      # Hosted runners share GitHub's anonymous API allowance. A token keeps
+      # the check reliable; it does not change what staff need to install.
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Show this runner's anonymous GitHub API allowance
+        run: curl -s https://api.github.com/rate_limit | grep -A4 '"core"' || true
+        shell: bash
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: ${{ matrix.r }}

@@ -1,5 +1,7 @@
-# Installs the way the README tells staff to: a clean library, no compiler
-# tools and no GitHub token. Pass repositories to install from public GitHub,
+# Installs the way the README tells staff to: a clean library and no compiler
+# tools. Staff need no GitHub token; the workflow supplies GITHUB_PAT only
+# because hosted runners share GitHub's anonymous allowance of 60 requests an
+# hour per address. Pass repositories to install from public GitHub,
 # or a directory to install that checkout by the same route, so a pull request
 # is tested before it is merged.
 #
@@ -62,7 +64,6 @@ check_github_install <- function(sources) {
       upgrade = "always",
       build = FALSE,
       lib = library,
-      auth_token = NULL,
       quiet = TRUE
     )
     packages <- basename(sources)
