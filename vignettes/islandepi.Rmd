@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-`islandepi` provides small, validated functions for routine public health
+`islandepi` provides small, tested functions for routine public health
 analysis. Every example on this page is evaluated when the website is built,
 so the printed values are actual package output. The examples use dplyr and
 tidyr, which `islandepi` installs with itself.

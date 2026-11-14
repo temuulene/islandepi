@@ -105,11 +105,21 @@ Roxygen docs on every exported function, wrapped at 80 characters, with a
 runnable example unless it needs the network; internals get `@noRd` or no
 roxygen at all.
 
-## Versioning
+## Maintenance and releases
 
-`DESCRIPTION`'s `Version:` is the only version string. Bumping a version means
-editing `DESCRIPTION` and adding a `NEWS.md` heading. Order NEWS entries
+Temuulen Enebish maintains the package, reviews changes and makes the
+releases.
+
+`DESCRIPTION`'s `Version:` is the only version string. Order NEWS entries
 alphabetically by function name within each section.
+
+To release a version:
+
+1. Set `Version:` in `DESCRIPTION` and add a `NEWS.md` heading for it.
+2. Run the `release` workflow by hand from the Actions tab. This rehearsal
+   builds, checks and test-installs everything, and publishes nothing.
+3. Tag that commit `vX.Y.Z`, matching `DESCRIPTION`, and push the tag. The
+   workflow publishes the release files once every job has passed.
 
 ## Prose
 

@@ -1,6 +1,6 @@
 # islandepi <a href="https://temuulene.github.io/islandepi/"><img src="man/figures/logo.png" align="right" height="139" alt="islandepi website" /></a>
 
-Validated epidemiological methods for Island Health analyses.
+Tested epidemiological methods for Island Health analyses.
 
 `islandepi` provides reusable mechanics for routine surveillance, rates,
 standardization, disclosure control and BC population and geography data. It
@@ -207,6 +207,14 @@ when the governing reproducibility or retention standard requires it.
 
 Use [`islandbrand`](https://github.com/temuulene/islandbrand) for Island Health
 figures, tables and Quarto reports. The packages can be loaded together.
+
+## Maintenance
+
+Temuulen Enebish, of the PHASE team, maintains `islandepi` and makes its
+releases. Report a problem or ask for a change on the
+[issue tracker](https://github.com/temuulene/islandepi/issues). The
+[contributing guide](https://github.com/temuulene/islandepi/blob/main/.github/CONTRIBUTING.md)
+describes how a release is made.
 
 ## Licence
 
