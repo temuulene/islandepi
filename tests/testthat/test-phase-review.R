@@ -79,8 +79,17 @@ test_that("a timestamp conversion that moves a date is reported", {
   expect_equal(shifted$period_start, as.Date(c("2026-01-14", "2026-01-15")))
   expect_equal(shifted$count, c(2, 2))
 
+  # Converted on purpose, as true instants, the dates move and nothing is said.
+  instants <- events
+  attr(instants$seen, "tzone") <- "America/Vancouver"
+  expect_no_warning(
+    converted <- islh_count_events(instants, date = seen, id = id)
+  )
+  expect_equal(converted$period_start, shifted$period_start)
+  expect_equal(converted$count, shifted$count)
+
   # Relabelled as local clock times, nothing moves and nothing is said.
-  events$seen <- lubridate::force_tz(events$seen, "America/Vancouver")
+  events$seen <- as.POSIXct(format(events$seen), tz = "America/Vancouver")
   expect_no_warning(
     local <- islh_count_events(events, date = seen, id = id)
   )

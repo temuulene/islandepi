@@ -55,9 +55,9 @@
 #' 02:00 on January 15 is then counted on January 14.
 #'
 #' A warning says when the conversion moves any date. Settle it before
-#' counting. `lubridate::force_tz(x, "America/Vancouver")` relabels local
+#' counting. `as.POSIXct(format(x), tz = "America/Vancouver")` relabels local
 #' clock times without moving them, and
-#' `lubridate::with_tz(x, "America/Vancouver")` converts true instants. Either
+#' `attr(x, "tzone") <- "America/Vancouver"` converts true instants. Either
 #' way the warning stops. Date columns are never converted.
 #'
 #' The conversion uses the time zone rules that R has. British Columbia

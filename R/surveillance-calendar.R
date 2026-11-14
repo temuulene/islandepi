@@ -97,8 +97,9 @@
   }
   n_moved <- sum(moved)
   zone <- if (is.na(zone)) "the session time zone" else zone
-  relabel <- sprintf("lubridate::force_tz(x, \"%s\")", timezone)
-  convert <- sprintf("lubridate::with_tz(x, \"%s\")", timezone)
+  # Base R, so the advice works wherever the conversion itself does.
+  relabel <- sprintf("as.POSIXct(format(x), tz = \"%s\")", timezone)
+  convert <- sprintf("attr(x, \"tzone\") <- \"%s\"", timezone)
   .islh_warn(c(
     "{n_moved} timestamp{?s} fall{?s/} on a different calendar date in
      {.val {timezone}} than in {.val {zone}}, the time zone of the column.",
