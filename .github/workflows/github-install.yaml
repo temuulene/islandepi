@@ -21,7 +21,7 @@ jobs:
       # the check reliable; it does not change what staff need to install.
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Show this runner's anonymous GitHub API allowance
         run: curl -s https://api.github.com/rate_limit | grep -A4 '"core"' || true
         shell: bash
