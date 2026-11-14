@@ -260,6 +260,17 @@ islh_bc_geography <- function(
   out
 }
 
+# The text columns are read as text, never guessed. Left to guess, the reader
+# takes a `Gender` column whose first rows are "F" and "T" for a logical one:
+# "F" and "T" become FALSE and TRUE, "M" becomes missing, and every row is
+# then filtered out.
+.islh_bc_population_col_types <- list(
+  Region.Name = "c",
+  Region.Type = "c",
+  Type = "c",
+  Gender = "c"
+)
+
 .islh_fetch_bc_population <- function(
   record_id,
   resource_id,
@@ -271,7 +282,8 @@ islh_bc_geography <- function(
         record = record_id,
         resource = resource_id,
         verbose = FALSE,
-        show_col_types = FALSE
+        show_col_types = FALSE,
+        col_types = .islh_bc_population_col_types
       )
     ),
     call = call
@@ -310,6 +322,27 @@ islh_bc_geography <- function(
     "Gender"
   )
   .islh_check_columns(raw, required, call = call)
+
+  # The sex filter below matches these codes exactly, so anything else would
+  # drop rows without saying so.
+  gender <- raw[["Gender"]]
+  sex_codes <- c("F", "M", "T")
+  if (
+    !(is.character(gender) || is.factor(gender)) ||
+      anyNA(gender) ||
+      !all(as.character(gender) %in% sex_codes)
+  ) {
+    .islh_abort(
+      c(
+        "The population resource has unexpected {.field Gender} values.",
+        x = "Expected only the text codes {.val {sex_codes}}.",
+        i = "A column read as logical turns {.val F} and {.val T} into
+             {.code FALSE} and {.code TRUE}, and {.val M} into a missing
+             value."
+      ),
+      call = call
+    )
+  }
 
   age_cols <- grep("^[0-9]+\\+?$", names(raw), value = TRUE)
   if (length(age_cols) == 0L) {

@@ -109,6 +109,69 @@ test_that("population requests prevent double counting and schema drift", {
   )
 })
 
+test_that("a sex column read as logical stops instead of losing every row", {
+  # What a type-guessing reader makes of a column that starts "F", "T": the
+  # codes become FALSE and TRUE, and "M" becomes missing.
+  raw <- data.frame(
+    Region = 41,
+    Region.Name = "South Vancouver Island",
+    Region.Type = "Health Service Delivery Area",
+    Year = 2025,
+    Type = "Estimate",
+    Gender = c(FALSE, NA, TRUE)
+  )
+  for (age in 0:89) {
+    raw[[as.character(age)]] <- 10
+  }
+  raw[["90+"]] <- 1
+
+  expect_error(
+    islandepi:::.islh_tidy_bc_population(
+      raw,
+      "hsda",
+      2025,
+      c("F", "M"),
+      "five_year",
+      NULL
+    ),
+    "unexpected `?Gender`? values"
+  )
+
+  raw$Gender <- c("F", "M", "X")
+  expect_error(
+    islandepi:::.islh_tidy_bc_population(
+      raw,
+      "hsda",
+      2025,
+      c("F", "M"),
+      "five_year",
+      NULL
+    ),
+    "unexpected `?Gender`? values"
+  )
+})
+
+test_that("the population download reads its text columns as text", {
+  skip_if_not_installed("bcdata")
+
+  seen <- new.env()
+  local_mocked_bindings(
+    bcdc_get_data = function(record, resource, ...) {
+      seen$args <- list(record = record, resource = resource, ...)
+      data.frame()
+    },
+    .package = "bcdata"
+  )
+  islandepi:::.islh_fetch_bc_population("a-record", "a-resource")
+
+  expect_identical(seen$args$record, "a-record")
+  expect_identical(seen$args$resource, "a-resource")
+  expect_identical(
+    seen$args$col_types[c("Region.Name", "Region.Type", "Type", "Gender")],
+    list(Region.Name = "c", Region.Type = "c", Type = "c", Gender = "c")
+  )
+})
+
 test_that("boundary downloads use stable join keys and Island Health alias", {
   skip_if_not_installed("bcdata")
   skip_if_not_installed("dplyr")
