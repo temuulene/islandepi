@@ -60,7 +60,9 @@
   if (inherits(x, "Date")) {
     value <- as.Date(x)
   } else if (inherits(x, "POSIXt")) {
-    value <- as.Date(as.POSIXct(x), tz = timezone)
+    stamp <- as.POSIXct(x)
+    value <- as.Date(stamp, tz = timezone)
+    .islh_surv_warn_date_shift(stamp, value, timezone)
   } else if (is.character(x) || is.factor(x)) {
     text <- trimws(as.character(x))
     shape_ok <- grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", text)
@@ -75,6 +77,37 @@
 
   invalid <- invalid | (!missing & !is.finite(as.numeric(value)))
   list(value = value, missing = missing, invalid = invalid)
+}
+
+# A timestamp is an instant, and its calendar date depends on the time zone it
+# is read in. Converting to the reporting timezone is right for true instants
+# and wrong for local clock times that were labelled with another zone when
+# they were read, as database drivers do with UTC. The values cannot say which
+# they are, so say when the conversion moved a date and how to settle it.
+.islh_surv_warn_date_shift <- function(stamp, value, timezone) {
+  zone <- attr(stamp, "tzone", exact = TRUE)
+  zone <- if (is.null(zone) || !nzchar(zone[[1]])) Sys.timezone() else zone[[1]]
+  if (identical(zone, timezone)) {
+    return(invisible(FALSE))
+  }
+  shown <- as.Date(format(stamp, "%Y-%m-%d"))
+  moved <- !is.na(value) & !is.na(shown) & value != shown
+  if (!any(moved)) {
+    return(invisible(FALSE))
+  }
+  n_moved <- sum(moved)
+  zone <- if (is.na(zone)) "the session time zone" else zone
+  relabel <- sprintf("lubridate::force_tz(x, \"%s\")", timezone)
+  convert <- sprintf("lubridate::with_tz(x, \"%s\")", timezone)
+  .islh_warn(c(
+    "{n_moved} timestamp{?s} fall{?s/} on a different calendar date in
+     {.val {timezone}} than in {.val {zone}}, the time zone of the column.",
+    i = "Local clock times labelled {.val {zone}} when they were read? Relabel
+         them first with {.code {relabel}}.",
+    i = "True instants? Convert them first with {.code {convert}}, which
+         states the choice and stops this warning."
+  ))
+  invisible(TRUE)
 }
 
 .islh_surv_as_date <- function(

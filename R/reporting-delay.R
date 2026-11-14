@@ -38,7 +38,8 @@
 #'   Events after `as_of - max_delay` are left out. See the right-truncation
 #'   section.
 #' @param timezone Reporting timezone for timestamps. Date values are
-#'   unchanged.
+#'   unchanged. A warning says when converting a timestamp moves its date; see
+#'   the timestamps section of [islh_count_events()].
 #'
 #' @return One row per group with `n`, `mean_delay`, one `delay_p` column per
 #'   probability (for example `delay_p50` and `delay_p90`) and

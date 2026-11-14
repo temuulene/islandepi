@@ -18,7 +18,9 @@
 #' whether an exceedance is an outbreak or requires public-health action.
 #'
 #' @param timezone Reporting timezone for timestamps. Defaults to
-#'   `"America/Vancouver"`; Date inputs retain their calendar date.
+#'   `"America/Vancouver"`; Date inputs retain their calendar date. A warning
+#'   says when converting a timestamp moves its date; see the timestamps
+#'   section of [islh_count_events()].
 #' @param data A data frame containing one row per group and reference period.
 #' @param date Period date column.
 #' @param value Whole-count column.

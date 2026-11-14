@@ -6,7 +6,9 @@
 #' cutoff.
 #'
 #' @param timezone Reporting timezone for timestamps. Defaults to
-#'   `"America/Vancouver"`; Date inputs retain their calendar date.
+#'   `"America/Vancouver"`; Date inputs retain their calendar date. A warning
+#'   says when converting a timestamp moves its date; see the timestamps
+#'   section.
 #' @param data A data frame.
 #' @param date Date column.
 #' @param id Optional identifier column. When supplied, distinct non-missing IDs
@@ -43,6 +45,30 @@
 #' @return A data frame containing the grouping columns, `period_start`,
 #'   `period_end`, `count` and `partial_period`. The result carries the
 #'   reporting period it was built with; see the reporting-period section.
+#'
+#' @section Timestamps:
+#'
+#' A date-time is converted to `timezone` before its calendar date is taken.
+#' That is right for true instants. It is wrong for local clock times that
+#' were labelled UTC when they were read, which is what database drivers such
+#' as `odbc` do by default with a SQL Server `datetime` column: an event at
+#' 02:00 on January 15 is then counted on January 14.
+#'
+#' A warning says when the conversion moves any date. Settle it before
+#' counting. `lubridate::force_tz(x, "America/Vancouver")` relabels local
+#' clock times without moving them, and
+#' `lubridate::with_tz(x, "America/Vancouver")` converts true instants. Either
+#' way the warning stops. Date columns are never converted.
+#'
+#' The conversion uses the time zone rules that R has. British Columbia
+#' stopped changing its clocks in November 2026, and rules older than that
+#' place winter instants an hour early. To check an installation, this should
+#' give 05:00:
+#'
+#' ```r
+#' noon_utc <- as.POSIXct("2027-01-15 12:00", tz = "UTC")
+#' format(noon_utc, "%H:%M", tz = "America/Vancouver")
+#' ```
 #'
 #' @section Reporting-period metadata:
 #'

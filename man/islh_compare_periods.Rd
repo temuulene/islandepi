@@ -45,7 +45,8 @@ name it, unless its dates are consecutive days.}
 when \code{interval} is \code{"week"} and there is no metadata.}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
-unchanged.}
+unchanged. A warning says when converting a timestamp moves its date; see
+the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 
 \item{conf}{Confidence level of the ratio's limits.}
 }

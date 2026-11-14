@@ -26,7 +26,8 @@ as 9 for September. \code{NULL} (the default) leaves out the season columns,
 because season definitions differ by programme.}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
-unchanged.}
+unchanged. A warning says when converting a timestamp moves its date; see
+the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 }
 \value{
 A data frame with one row per input date, in input order: \code{date},

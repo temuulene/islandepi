@@ -38,7 +38,9 @@ to today's date in \code{timezone}, the same calendar the event dates are read
 in; use \code{NULL} when future-dated records are expected.}
 
 \item{timezone}{Reporting timezone for timestamps. Defaults to
-\code{"America/Vancouver"}; Date inputs retain their calendar date.}
+\code{"America/Vancouver"}; Date inputs retain their calendar date. A warning
+says when converting a timestamp moves its date; see the timestamps
+section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 
 \item{allowed}{Optional named list of permitted values, such as
 \code{list(sex = c("Female", "Male"))}. Each name is a column; a present value

@@ -64,7 +64,9 @@ combinations. This is how groups with no events anywhere in the selected
 window can still be shown.}
 
 \item{timezone}{Reporting timezone for timestamps. Defaults to
-\code{"America/Vancouver"}; Date inputs retain their calendar date.}
+\code{"America/Vancouver"}; Date inputs retain their calendar date. A warning
+says when converting a timestamp moves its date; see the timestamps
+section.}
 
 \item{source_interval}{Duration of preaggregated counts when no metadata
 accompanies them. Supply it for weekly or longer source periods.}
@@ -80,6 +82,31 @@ consistent period table. It handles epidemiological and ISO weeks, constructs
 missing zero-count periods and marks periods that extend beyond the reporting
 cutoff.
 }
+\section{Timestamps}{
+
+
+A date-time is converted to \code{timezone} before its calendar date is taken.
+That is right for true instants. It is wrong for local clock times that
+were labelled UTC when they were read, which is what database drivers such
+as \code{odbc} do by default with a SQL Server \code{datetime} column: an event at
+02:00 on January 15 is then counted on January 14.
+
+A warning says when the conversion moves any date. Settle it before
+counting. \code{lubridate::force_tz(x, "America/Vancouver")} relabels local
+clock times without moving them, and
+\code{lubridate::with_tz(x, "America/Vancouver")} converts true instants. Either
+way the warning stops. Date columns are never converted.
+
+The conversion uses the time zone rules that R has. British Columbia
+stopped changing its clocks in November 2026, and rules older than that
+place winter instants an hour early. To check an installation, this should
+give 05:00:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{noon_utc <- as.POSIXct("2027-01-15 12:00", tz = "UTC")
+format(noon_utc, "\%H:\%M", tz = "America/Vancouver")
+}\if{html}{\out{</div>}}
+}
+
 \section{Reporting-period metadata}{
 
 

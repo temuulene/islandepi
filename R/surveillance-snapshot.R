@@ -4,7 +4,9 @@
 #' operational table: one row per group, recent periods in columns, a current
 #' total and optional historical reference statistics.
 #'
-#' @param timezone Reporting timezone for timestamps. Date values are unchanged.
+#' @param timezone Reporting timezone for timestamps. Date values are
+#'   unchanged. A warning says when converting a timestamp moves its date; see
+#'   the timestamps section of [islh_count_events()].
 #' @param missing_periods How to handle missing source periods: stop (default),
 #'   retain missing values, or explicitly confirm they are zero. Partial
 #'   periods always stop.

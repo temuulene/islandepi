@@ -48,11 +48,54 @@ test_that("population selections retain the requested denominator only", {
 test_that("timestamps use the reporting calendar", {
   stamp <- as.POSIXct("2026-07-05 23:30:00", tz = "America/Vancouver")
   expect_equal(.islh_surv_as_date(stamp, "date"), as.Date("2026-07-05"))
-  expect_equal(
-    .islh_surv_as_date(stamp, "date", timezone = "UTC"),
-    as.Date("2026-07-06")
+  # The date moves, so the conversion says so.
+  expect_warning(
+    converted <- .islh_surv_as_date(stamp, "date", timezone = "UTC"),
+    "different calendar date"
   )
+  expect_equal(converted, as.Date("2026-07-06"))
   expect_error(.islh_surv_as_date(stamp, "date", timezone = "bad"), "timezone")
+})
+
+test_that("a timestamp conversion that moves a date is reported", {
+  # Local clock times as a database driver returns them: labelled UTC.
+  events <- data.frame(
+    id = 1:4,
+    seen = as.POSIXct(
+      c(
+        "2026-01-15 02:00:00",
+        "2026-01-15 07:30:00",
+        "2026-01-15 09:00:00",
+        "2026-01-15 23:30:00"
+      ),
+      tz = "UTC"
+    )
+  )
+
+  expect_warning(
+    shifted <- islh_count_events(events, date = seen, id = id),
+    "2 timestamps fall on a different calendar date"
+  )
+  expect_equal(shifted$period_start, as.Date(c("2026-01-14", "2026-01-15")))
+  expect_equal(shifted$count, c(2, 2))
+
+  # Relabelled as local clock times, nothing moves and nothing is said.
+  events$seen <- lubridate::force_tz(events$seen, "America/Vancouver")
+  expect_no_warning(
+    local <- islh_count_events(events, date = seen, id = id)
+  )
+  expect_equal(local$period_start, as.Date("2026-01-15"))
+  expect_equal(local$count, 4)
+
+  # Timestamps whose dates agree in both zones convert quietly.
+  midday <- as.POSIXct(
+    c("2026-01-15 20:00:00", "2026-01-16 21:00:00"),
+    tz = "UTC"
+  )
+  expect_no_warning(
+    dates <- .islh_surv_as_date(midday, "date")
+  )
+  expect_equal(dates, as.Date(c("2026-01-15", "2026-01-16")))
 })
 
 test_that("partial first and last periods are excluded or flagged", {

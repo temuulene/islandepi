@@ -19,7 +19,8 @@
 #'   as 9 for September. `NULL` (the default) leaves out the season columns,
 #'   because season definitions differ by programme.
 #' @param timezone Reporting timezone for timestamps. Date values are
-#'   unchanged.
+#'   unchanged. A warning says when converting a timestamp moves its date; see
+#'   the timestamps section of [islh_count_events()].
 #'
 #' @return A data frame with one row per input date, in input order: `date`,
 #'   `week_start_date`, `isoweek_start`, `iso_year`, `iso_week`,

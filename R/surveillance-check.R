@@ -5,7 +5,9 @@
 #' suitable for review with a data owner before analysis continues.
 #'
 #' @param timezone Reporting timezone for timestamps. Defaults to
-#'   `"America/Vancouver"`; Date inputs retain their calendar date.
+#'   `"America/Vancouver"`; Date inputs retain their calendar date. A warning
+#'   says when converting a timestamp moves its date; see the timestamps
+#'   section of [islh_count_events()].
 #' @param data A data frame containing one row per event or encounter.
 #' @param id Column or columns identifying an event. Several columns, such as
 #'   `c(person_id, encounter_date)`, form a composite key: a record is a

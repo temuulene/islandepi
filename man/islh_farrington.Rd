@@ -58,7 +58,8 @@ current outbreak does not raise its own limit.}
 own. \code{low_count = 0} assesses every week.}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
-unchanged.}
+unchanged. A warning says when converting a timestamp moves its date; see
+the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 }
 \value{
 One row per group and week in \code{from} to \code{to}: the grouping

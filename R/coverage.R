@@ -40,7 +40,8 @@
 #'   `"isoweek"`, `"epiweek"`, `"month"`, `"quarter"` or `"year"`.
 #' @param week_start Start of an ordinary week, from 1 (Monday) to 7 (Sunday).
 #' @param timezone Reporting timezone for timestamps. Date values are
-#'   unchanged.
+#'   unchanged. A warning says when converting a timestamp moves its date; see
+#'   the timestamps section of [islh_count_events()].
 #'
 #' @return A data frame with the grouping columns, `period_start`,
 #'   `period_end`, `records` (the number of submissions), `received` and

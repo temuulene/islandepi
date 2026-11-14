@@ -65,7 +65,9 @@ explicitly. Use it for limits that did not come from
 \code{\link[=islh_surveillance_baseline]{islh_surveillance_baseline()}}, such as last season's totals read from a
 spreadsheet. \code{NULL} uses the duration the baseline records.}
 
-\item{timezone}{Reporting timezone for timestamps. Date values are unchanged.}
+\item{timezone}{Reporting timezone for timestamps. Date values are
+unchanged. A warning says when converting a timestamp moves its date; see
+the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 
 \item{missing_periods}{How to handle missing source periods: stop (default),
 retain missing values, or explicitly confirm they are zero. Partial

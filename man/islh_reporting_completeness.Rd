@@ -42,7 +42,8 @@ group.}
 back from \code{as_of - maturity}. \code{NULL} learns from every mature event.}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
-unchanged.}
+unchanged. A warning says when converting a timestamp moves its date; see
+the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 }
 \value{
 One row per group and event date in the last \code{max_delay} days up to
