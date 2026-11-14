@@ -1,8 +1,10 @@
 # Contributing
 
-Guidance for working in this repository.
+Thank you for helping with `islandepi`. This guide explains how the package is
+put together and what a change needs before it is merged. Open an issue first
+for anything larger than a small fix, so the approach can be agreed.
 
-## What this repo is
+## About the package
 
 `islandepi` holds the epidemiological methods used by the PHASE team at Island
 Health: surveillance event checks and period counts, descriptive baselines and

@@ -17,6 +17,7 @@ Description: Provides validated helpers for common applied epidemiology
     analysis.
 License: file LICENSE
 Encoding: UTF-8
+Language: en-CA
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
