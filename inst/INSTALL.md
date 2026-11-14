@@ -44,13 +44,13 @@ and on the current R release.
 
 `islandbrand` is released separately, at
 [its own Releases page](https://github.com/temuulene/islandbrand/releases).
-The two are approved as a pair: the team lead records which `islandbrand`
+The two are approved as a pair: the maintainer records which `islandbrand`
 version goes with which `islandepi` version.
 
 ## Installing from release files
 
-1. Confirm the approved `islandepi` and `islandbrand` versions with the team
-   lead.
+1. Confirm the approved `islandepi` and `islandbrand` versions with the
+   maintainer.
 2. Download from the `islandepi` release its ZIP, `install-phase.R` and the
    dependency manifest. Download the `islandbrand` ZIP from the paired
    `islandbrand` release.
@@ -74,7 +74,7 @@ version goes with which `islandepi` version.
 
 Installing dependencies from CRAN gives the current CRAN versions, not the ones
 in the dependency manifest. For a deployment that must match the release
-exactly, or a laptop without internet access, the team lead prepares a bundle
+exactly, or a laptop without internet access, the maintainer prepares a bundle
 of Windows binary ZIPs at the versions in the manifest. Install those ZIPs
 first, then run the installer with `install_dependencies = FALSE`.
 
