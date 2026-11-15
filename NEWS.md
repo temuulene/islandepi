@@ -17,6 +17,10 @@ First public release. It includes:
     (`ratio_lower`, `ratio_upper`) at the level set by `conf`.
   * `islh_compare_periods()` and `islh_farrington()` refuse partial or
     unknown-partial periods, as the baseline and snapshot already did.
+  * A date-time is converted to `timezone` before its calendar date is taken.
+    A warning says when that moves any date, as it does for local clock times
+    that a database driver labelled UTC, and the help for
+    `islh_count_events()` shows how to settle it.
   * `islh_reporting_completeness()` learns delays only from events at least
     `maturity` days old, warns when older events contradict that assumption,
     and reports the learning window beside each estimate.
@@ -26,6 +30,10 @@ First public release. It includes:
   is adjustable, and the settings used are recorded with the result.
 * BC population and geography data from pinned BC Data Catalogue sources,
   tested against a slice of the current catalogue schema.
+  * `islh_bc_population()` reads the catalogue's text columns as text. Left
+    to guess, the reader took the sex column of the health service delivery
+    area file for a logical one, and `"hsda"` returned no rows. A sex column
+    holding anything but `F`, `M` and `T` stops with a message.
 * Age groups, checked denominator joins, crude and directly standardized rates,
   proportions and Poisson intervals.
   * `islh_dsr_ratio()` compares two directly standardized rates with Fay's F
@@ -60,7 +68,9 @@ First public release. It includes:
   Windows without compiler tools.
 * Releases publish the standalone installer and a manifest of the dependency
   versions the Windows binary was built with, and test-install the binary into
-  an empty library before publishing.
+  an empty library, on R 4.4.1 and on the current R, before publishing. The
+  release workflow can also be run by hand as a rehearsal that publishes
+  nothing.
 * Example data for the examples and articles. `islh_outbreak` and
   `islh_seasons` describe the same simulated 2025-26 season, and
   `islh_lha_population` holds BC Stats' 2025 population estimates for

@@ -1,8 +1,8 @@
 # PHASE installation and pilot release
 
-Staff target: Windows with R 4.4.1 and a writable user library. Do not
-install packages while knitting or rendering. Do not use pak on managed staff
-laptops.
+Staff target: Windows with R 4.4.1 or the current R release, and a writable
+user library. Do not install packages while knitting or rendering. Do not use
+pak on managed staff laptops.
 
 ## From GitHub
 
@@ -30,7 +30,8 @@ the deployment must match the dependency manifest exactly.
 Each `islandepi` release on
 [GitHub Releases](https://github.com/temuulene/islandepi/releases) carries:
 
-- `islandepi_<version>.zip`, the Windows binary for R 4.4;
+- `islandepi_<version>.zip`, the Windows binary, built on R 4.4.1 and also
+  test-installed on the current R release;
 - `islandepi_<version>.tar.gz`, the source package;
 - `install-phase.R`, the installer used below;
 - `islandepi_<version>_windows-dependencies.csv`, every dependency and the
@@ -38,17 +39,18 @@ Each `islandepi` release on
 
 Assets are published only after the Windows and Linux build and check jobs
 succeed, and after the Windows ZIP has been installed into an empty library
-with `install-phase.R`, loaded, and used for a check calculation.
+with `install-phase.R`, loaded, and used for a check calculation, on R 4.4.1
+and on the current R release.
 
 `islandbrand` is released separately, at
 [its own Releases page](https://github.com/temuulene/islandbrand/releases).
-The two are approved as a pair: the team lead records which `islandbrand`
+The two are approved as a pair: the maintainer records which `islandbrand`
 version goes with which `islandepi` version.
 
 ## Installing from release files
 
-1. Confirm the approved `islandepi` and `islandbrand` versions with the team
-   lead.
+1. Confirm the approved `islandepi` and `islandbrand` versions with the
+   maintainer.
 2. Download from the `islandepi` release its ZIP, `install-phase.R` and the
    dependency manifest. Download the `islandbrand` ZIP from the paired
    `islandbrand` release.
@@ -72,7 +74,7 @@ version goes with which `islandepi` version.
 
 Installing dependencies from CRAN gives the current CRAN versions, not the ones
 in the dependency manifest. For a deployment that must match the release
-exactly, or a laptop without internet access, the team lead prepares a bundle
+exactly, or a laptop without internet access, the maintainer prepares a bundle
 of Windows binary ZIPs at the versions in the manifest. Install those ZIPs
 first, then run the installer with `install_dependencies = FALSE`.
 

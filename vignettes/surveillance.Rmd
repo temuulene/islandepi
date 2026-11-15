@@ -979,7 +979,10 @@ is skipped; all analytical examples still run.
 ## Coverage and reporting calendar
 
 Timestamp conversion defaults to `America/Vancouver`; supply `timezone` to
-change the reporting calendar explicitly. Both the first and last incomplete
+change the reporting calendar explicitly. A database driver often labels
+local clock times as UTC, and converting those moves early-morning events to
+the previous day. A warning says when a conversion moves any date, and the
+timestamps section of `?islh_count_events` shows how to settle it. Both the first and last incomplete
 periods are excluded by default from counts, and a message says how many
 events that left out. Preaggregated weekly counts cannot be relabelled to a
 different week start.

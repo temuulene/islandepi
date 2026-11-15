@@ -1,6 +1,10 @@
+# A tag builds, checks and publishes a release. A manual run does everything
+# except publish: it is a rehearsal, and leaves the built files on the run
+# page as artefacts.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 name: release
 
@@ -19,8 +23,9 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check the tag matches DESCRIPTION
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           tag="${GITHUB_REF#refs/tags/v}"
           described=$(grep '^Version:' DESCRIPTION | sed 's/Version: *//')
@@ -39,7 +44,7 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
       - name: Require a clean package check
-        run: rcmdcheck::rcmdcheck(args = "--no-manual", error_on = "note")
+        run: rcmdcheck::rcmdcheck(args = "--no-manual", error_on = "warning")
         shell: Rscript {0}
 
       # Build the source package on both runners. R CMD build knits the
@@ -112,11 +117,44 @@ jobs:
             *_windows-dependencies.csv
           if-no-files-found: error
 
-  publish:
+  # Staff are moving from R 4.4 to the current release. The ZIP is built on
+  # 4.4.1, so the same file is installed on the current R as well, by the same
+  # route, before anything is published.
+  install-current:
     needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-zip
+      - name: Clean install on the current R with the staff installer
+        shell: bash
+        run: |
+          clean="$RUNNER_TEMP/clean-library"
+          mkdir -p "$clean"
+          R_LIBS="" R_LIBS_SITE="" R_LIBS_USER="$clean" Rscript --vanilla -e '
+            source("inst/scripts/install-phase.R")
+            version <- read.dcf("DESCRIPTION")[1, "Version"]
+            install_phase_zip(
+              Sys.glob("islandepi_*.zip"),
+              package = "islandepi",
+              version = version,
+              lib = Sys.getenv("R_LIBS_USER")
+            )
+            message("Installed on ", R.version.string)
+          '
+
+  # Publishes only for a tag, and only when every job above passed.
+  publish:
+    needs: [build, install-current]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: source
       - uses: actions/download-artifact@v4

@@ -41,7 +41,7 @@ test_that("valid event data returns an empty issue table", {
 test_that("event checks support POSIX dates and date limits", {
   data <- data.frame(
     id = c("A", "B"),
-    date = as.POSIXct(c("2026-01-01", "2026-01-03"), tz = "UTC")
+    date = as.POSIXct(c("2026-01-01", "2026-01-03"), tz = "America/Vancouver")
   )
   issues <- islh_check_events(
     data,

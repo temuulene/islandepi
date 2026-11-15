@@ -55,7 +55,8 @@
 #' @param week_start Start of an ordinary week, from 1 (Monday) to 7 (Sunday),
 #'   when `interval` is `"week"` and there is no metadata.
 #' @param timezone Reporting timezone for timestamps. Date values are
-#'   unchanged.
+#'   unchanged. A warning says when converting a timestamp moves its date; see
+#'   the timestamps section of [islh_count_events()].
 #' @param conf Confidence level of the ratio's limits.
 #'
 #' @return A data frame with one row per group and comparison: the grouping

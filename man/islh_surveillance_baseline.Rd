@@ -51,7 +51,9 @@ days: rows a week apart could be weekly totals or daily counts with days
 missing, and the dates cannot say which.}
 
 \item{timezone}{Reporting timezone for timestamps. Defaults to
-\code{"America/Vancouver"}; Date inputs retain their calendar date.}
+\code{"America/Vancouver"}; Date inputs retain their calendar date. A warning
+says when converting a timestamp moves its date; see the timestamps
+section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 }
 \value{
 One row per group with the number of reference periods, descriptive

@@ -35,7 +35,8 @@ Events after \code{as_of - max_delay} are left out. See the right-truncation
 section.}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
-unchanged.}
+unchanged. A warning says when converting a timestamp moves its date; see
+the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 }
 \value{
 One row per group with \code{n}, \code{mean_delay}, one \code{delay_p} column per

@@ -38,7 +38,8 @@ on period boundaries of \code{interval}.}
 \item{week_start}{Start of an ordinary week, from 1 (Monday) to 7 (Sunday).}
 
 \item{timezone}{Reporting timezone for timestamps. Date values are
-unchanged.}
+unchanged. A warning says when converting a timestamp moves its date; see
+the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.}
 }
 \value{
 A data frame with the grouping columns, \code{period_start},
