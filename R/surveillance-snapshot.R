@@ -317,7 +317,8 @@ islh_surveillance_snapshot <- function(
   # counts can end on any day and still match a weekly baseline's duration
   # and mix of weekdays.
   if (
-    interval %in% c("week", "isoweek", "epiweek") &&
+    interval %in%
+      c("week", "isoweek", "epiweek") &&
       !is.null(baseline_meta$week_start) &&
       baseline_meta$interval %in% c("week", "isoweek", "epiweek") &&
       lubridate::wday(min(target_periods), week_start = 1) !=
