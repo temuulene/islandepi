@@ -209,6 +209,7 @@ islh_surveillance_snapshot <- function(
     !is.numeric(periods) ||
       length(periods) != 1L ||
       is.na(periods) ||
+      !is.finite(periods) ||
       periods != round(periods) ||
       periods < 1L
   ) {
@@ -312,8 +313,13 @@ islh_surveillance_snapshot <- function(
     total = include_total
   )
   window_end <- .islh_surv_period_end(max(target_periods), interval, week_start)
+  # Only a weekly snapshot has a week anchor. A seven-day window of daily
+  # counts can end on any day and still match a weekly baseline's duration
+  # and mix of weekdays.
   if (
-    !is.null(baseline_meta$week_start) &&
+    interval %in%
+      c("week", "isoweek", "epiweek") &&
+      !is.null(baseline_meta$week_start) &&
       baseline_meta$interval %in% c("week", "isoweek", "epiweek") &&
       lubridate::wday(min(target_periods), week_start = 1) !=
         baseline_meta$week_start
@@ -450,7 +456,7 @@ islh_surveillance_snapshot <- function(
       if (any(duplicate)) {
         .islh_abort("{.arg baseline} must contain one row per group.")
       }
-      baseline$.islh_matched <- TRUE
+      baseline$.islh_matched <- rep(TRUE, nrow(baseline))
       wide <- dplyr::left_join(
         wide,
         baseline,
@@ -640,8 +646,14 @@ islh_surveillance_snapshot <- function(
   ]
 
   expected <- coverage[coverage$expected, by, drop = FALSE]
+  # Groups with rows in the window only: a site that closed before it is not
+  # part of this snapshot and needs no coverage.
+  in_window <- work$.islh_date >= from & work$.islh_date <= to
   roster <- if (length(by) > 0L) {
-    unique(dplyr::bind_rows(expected, unique(work[by])))
+    unique(dplyr::bind_rows(
+      expected,
+      unique(work[in_window, by, drop = FALSE])
+    ))
   } else {
     NULL
   }
@@ -692,6 +704,26 @@ islh_surveillance_snapshot <- function(
   }
 
   missed <- coverage[!coverage$received, keys, drop = FALSE]
+  # Coverage lists a group nobody expected only on the periods it sent
+  # something. Its other periods have no feed, so their counts are unknown,
+  # not zero.
+  if (length(by) > 0L) {
+    unexpected <- roster[
+      is.na(.islh_key_match(roster, unique(expected), by)),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(unexpected) > 0L) {
+      unlisted <- .islh_surv_grid(unexpected, periods, by)
+      names(unlisted)[names(unlisted) == "period_start"] <- ".islh_date"
+      unlisted <- unlisted[
+        is.na(.islh_key_match(unlisted, coverage, keys)),
+        keys,
+        drop = FALSE
+      ]
+      missed <- dplyr::bind_rows(missed, unlisted)
+    }
+  }
   if (nrow(missed) > 0L) {
     at <- .islh_key_match(work, missed, keys)
     work$.islh_value[!is.na(at)] <- NA_real_

@@ -17,7 +17,9 @@
 #'   of distinct people. When neither `id` nor `count` is supplied, rows are
 #'   counted.
 #' @param source_interval Duration of preaggregated counts when no metadata
-#'   accompanies them. Supply it for weekly or longer source periods.
+#'   accompanies them. Required for such counts unless their dates are
+#'   consecutive days, since rows a week apart could be weekly totals or daily
+#'   counts with gaps.
 #' @param count Optional column of pre-aggregated whole counts. `id` and `count`
 #'   cannot both be supplied.
 #' @param by Optional tidy-select specification of grouping columns.
@@ -159,11 +161,16 @@ islh_count_events <- function(
 
   source_meta <- .islh_surv_meta(data)
   if (length(count_name) > 0L && !is.null(source_interval)) {
+    source_interval <- .islh_surv_interval(
+      source_interval,
+      arg = "source_interval"
+    )
     if (!is.null(source_meta)) {
       .islh_surv_resolve_interval(
         source_interval,
         source_meta,
-        as.Date(character())
+        as.Date(character()),
+        arg = "source_interval"
       )
     } else {
       source_meta <- list(
@@ -182,6 +189,23 @@ islh_count_events <- function(
     date_name,
     timezone = timezone
   )
+  # Counts with no record of what a row covers are checked like recorded
+  # ones. Consecutive days can only be daily counts; any other spacing could
+  # be weekly totals or daily counts with gaps, and recounting weekly totals
+  # as days would put each week on its first day.
+  if (length(count_name) > 0L && is.null(source_meta)) {
+    inferred <- .islh_surv_infer_interval(work$.islh_date)
+    if (is.null(inferred)) {
+      .islh_abort(c(
+        "{.arg data} does not record what one row of {.arg count} covers.",
+        x = "Its dates are not consecutive days, so a row could be a day, a
+             week or longer.",
+        i = "Name it with {.arg source_interval}, or keep the metadata
+             {.fn islh_count_events} records."
+      ))
+    }
+    source_meta <- list(interval = inferred, periods = 1L, week_start = NULL)
+  }
 
   if (is.null(from)) {
     if (nrow(work) == 0L) {
@@ -229,17 +253,7 @@ islh_count_events <- function(
         "The requested window splits source periods; recount the events."
       )
     }
-    if (
-      "partial_period" %in%
-        names(work) &&
-        any(
-          is.na(work$partial_period[overlaps]) | work$partial_period[overlaps]
-        )
-    ) {
-      .islh_abort(
-        "Preaggregated input contains partial periods; recount the events."
-      )
-    }
+    .islh_surv_check_partial(work, overlaps)
   }
   if (length(count_name) > 0L && !is.null(source_meta)) {
     work$.islh_value <- .islh_check_counts(
@@ -254,7 +268,10 @@ islh_count_events <- function(
       from,
       to,
       policy = "error",
-      context = "count"
+      context = "count",
+      groups = if (!is.null(groups)) {
+        .islh_surv_groups(groups, by_names, work)
+      }
     )
   }
   selected <- work$.islh_date >= from & work$.islh_date <= to
@@ -285,9 +302,11 @@ islh_count_events <- function(
       na_matches = "na"
     )
     if (nrow(unexpected)) {
+      # Group labels go in as cli values, so braces in a label are shown.
+      shown <- .islh_key_labels(unexpected, by_names)
       .islh_abort(c(
         "Observed groups are absent from {.arg groups}.",
-        x = paste(utils::capture.output(print(unexpected)), collapse = "\n"),
+        x = "Not in {.arg groups}: {shown}.",
         i = "Correct the group labels or filter the input explicitly."
       ))
     }
@@ -427,6 +446,7 @@ islh_count_events <- function(
     periods = 1L,
     from = from,
     to = to,
-    id_repeats = id_repeats
+    id_repeats = id_repeats,
+    by = by_names
   )
 }

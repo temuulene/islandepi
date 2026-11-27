@@ -16,7 +16,10 @@ in the order they should appear.}
 A plain \code{data.frame} with the chosen columns and row names
 \code{1:nrow(data)}. Each column keeps only the attributes that define its type
 (\code{class}, \code{levels}, \code{tzone} and \code{units}), so dates, factors and times
-still work.
+still work. \code{POSIXlt} times are converted to \code{POSIXct}. Columns of other
+classes, matrix columns and S4 objects are refused, because removing
+their attributes would change or break them; convert them to plain
+values first.
 }
 \description{
 Results from this package carry working information as attributes: the

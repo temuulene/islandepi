@@ -148,6 +148,9 @@ islh_crude_rate <- function(
   conf <- .islh_check_conf(conf)
   per <- .islh_check_scalar_positive(per, "per")
   cases <- .islh_check_counts(cases, arg = "cases")
+  # Checked before recycling, so a bad single value is caught even when there
+  # are no cases to recycle it over.
+  population <- .islh_check_population(population)
 
   if (length(population) == 1L) {
     population <- rep(population, length(cases))
@@ -157,10 +160,10 @@ islh_crude_rate <- function(
       "{.arg population} must be length 1 or the same length as {.arg cases}."
     )
   }
-  population <- .islh_check_population(population)
 
   ci <- islh_ci_poisson(cases, conf = conf, method = method)
   scale <- per / population
+  n <- length(cases)
 
   data.frame(
     cases = cases,
@@ -169,8 +172,8 @@ islh_crude_rate <- function(
     lower = ci$lower * scale,
     upper = ci$upper * scale,
     method = ci$method,
-    conf = conf,
-    per = per
+    conf = rep(conf, n),
+    per = rep(per, n)
   )
 }
 
@@ -183,7 +186,8 @@ islh_crude_rate <- function(
 #' generally conservative coverage under independent Poisson counts, including
 #' the usual situation with age-standardized rates and small counts, where a
 #' normal-approximation interval is too narrow and can fall below zero.
-#' `"normal"` is provided for comparison with published figures that used it.
+#' `"normal"` is provided for comparison with published figures that used it;
+#' a lower limit below zero is reported as zero.
 #'
 #' Fay and Feuer's interval is exact whenever the standard population is
 #' proportional to the study population: with those weights it reduces to the
@@ -211,6 +215,9 @@ islh_crude_rate <- function(
 #'
 #' A zero *standard* population is allowed. It gives the stratum a weight of
 #' zero, which is how a standard population legitimately excludes an age band.
+#' The `cases` and `population` columns of the result are still totals over
+#' every stratum, including excluded ones, so they need not match the strata
+#' the rate describes. [islh_dsr_detail()] shows each stratum's weight.
 #'
 #' Intervals assume independent Poisson counts and fixed denominators.
 #' Recurrent events may be clustered; accepting these counts does not establish

@@ -14,10 +14,12 @@
     selected <- tryCatch(
       names(tidyselect::eval_select(quo, data = data)),
       error = function(error) {
+        # A cli value, not a template, so braces in the message are shown.
+        reason <- conditionMessage(error)
         .islh_abort(
           c(
             "Could not select {.arg {arg}} from {.arg data}.",
-            x = conditionMessage(error)
+            x = "{reason}"
           ),
           call = call
         )
@@ -62,7 +64,12 @@
   } else if (inherits(x, "POSIXt")) {
     stamp <- as.POSIXct(x)
     value <- as.Date(stamp, tz = timezone)
-    .islh_surv_warn_date_shift(stamp, value, timezone)
+    .islh_surv_warn_date_shift(
+      stamp,
+      value,
+      timezone,
+      local_time = inherits(x, "POSIXlt")
+    )
   } else if (is.character(x) || is.factor(x)) {
     text <- trimws(as.character(x))
     shape_ok <- grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", text)
@@ -84,7 +91,12 @@
 # and wrong for local clock times that were labelled with another zone when
 # they were read, as database drivers do with UTC. The values cannot say which
 # they are, so say when the conversion moved a date and how to settle it.
-.islh_surv_warn_date_shift <- function(stamp, value, timezone) {
+.islh_surv_warn_date_shift <- function(
+  stamp,
+  value,
+  timezone,
+  local_time = FALSE
+) {
   zone <- attr(stamp, "tzone", exact = TRUE)
   zone <- if (is.null(zone) || !nzchar(zone[[1]])) Sys.timezone() else zone[[1]]
   if (identical(zone, timezone)) {
@@ -100,6 +112,11 @@
   # Base R, so the advice works wherever the conversion itself does.
   relabel <- sprintf("as.POSIXct(format(x), tz = \"%s\")", timezone)
   convert <- sprintf("attr(x, \"tzone\") <- \"%s\"", timezone)
+  # Setting the tzone of a POSIXlt value relabels it rather than converting
+  # it, so convert to POSIXct first.
+  if (isTRUE(local_time)) {
+    convert <- paste0("x <- as.POSIXct(x); ", convert)
+  }
   .islh_warn(c(
     "{n_moved} timestamp{?s} fall{?s/} on a different calendar date in
      {.val {timezone}} than in {.val {zone}}, the time zone of the column.",
@@ -208,6 +225,9 @@
 # `periods` is how many `interval` periods one row summarizes: 1 for a period
 # count or a baseline limit, and the window length for a snapshot total.
 #
+# `by` names the grouping columns the counts were made at, so a later
+# function can check completeness at that level before adding groups up.
+#
 # `id_repeats` is set when counts are distinct identifiers. It records how many
 # identifiers appear in more than one period, and in more than one group, so a
 # later sum can say when it counts the same person twice. See
@@ -219,7 +239,8 @@
   periods = 1L,
   from = NULL,
   to = NULL,
-  id_repeats = NULL
+  id_repeats = NULL,
+  by = NULL
 ) {
   if (is.null(interval)) {
     return(x)
@@ -230,6 +251,7 @@
   attr(x, "islh_from") <- from
   attr(x, "islh_to") <- to
   attr(x, "islh_id_repeats") <- id_repeats
+  attr(x, "islh_by") <- by
   x
 }
 
@@ -269,7 +291,8 @@
     periods = as.integer(periods),
     from = attr(x, "islh_from", exact = TRUE),
     to = attr(x, "islh_to", exact = TRUE),
-    id_repeats = attr(x, "islh_id_repeats", exact = TRUE)
+    id_repeats = attr(x, "islh_id_repeats", exact = TRUE),
+    by = attr(x, "islh_by", exact = TRUE)
   )
 }
 
@@ -582,8 +605,7 @@
   if (length(by) == 0L) {
     return(period_data)
   }
-  if (nrow(groups) == 0L) {
-    return(groups[FALSE, , drop = FALSE])
-  }
+  # With no groups this still returns the period_start column, so later
+  # joins on it work.
   dplyr::cross_join(groups, period_data)
 }

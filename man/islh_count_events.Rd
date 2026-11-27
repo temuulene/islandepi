@@ -69,7 +69,9 @@ says when converting a timestamp moves its date; see the timestamps
 section.}
 
 \item{source_interval}{Duration of preaggregated counts when no metadata
-accompanies them. Supply it for weekly or longer source periods.}
+accompanies them. Required for such counts unless their dates are
+consecutive days, since rows a week apart could be weekly totals or daily
+counts with gaps.}
 }
 \value{
 A data frame containing the grouping columns, \code{period_start},

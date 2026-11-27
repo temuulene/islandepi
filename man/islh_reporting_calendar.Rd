@@ -36,7 +36,11 @@ A data frame with one row per input date, in input order: \code{date},
 (a label such as \code{"2025/26"}), \code{fiscal_quarter} (1 to 4, counted from
 \code{fiscal_start_month}) and, with \code{season_start_month}, \code{season} (a label
 such as \code{"2025-26"}) and \code{season_week} (weeks since the season started,
-counting the week holding the season's first day as 1).
+counting the week holding the season's first day as 1). Seasons follow
+whole weeks: the week holding the season's first day is week 1 of the new
+season, including any days of it that fall before that first day. So
+every date in a week, and the week's \code{week_start_date}, get the same
+season and season week.
 }
 \description{
 \code{islh_reporting_calendar()} gives each date the labels routine reports use:

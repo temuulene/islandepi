@@ -51,7 +51,8 @@ The default \code{"gamma"} interval is Fay and Feuer's method. It keeps its
 generally conservative coverage under independent Poisson counts, including
 the usual situation with age-standardized rates and small counts, where a
 normal-approximation interval is too narrow and can fall below zero.
-\code{"normal"} is provided for comparison with published figures that used it.
+\code{"normal"} is provided for comparison with published figures that used it;
+a lower limit below zero is reported as zero.
 
 Fay and Feuer's interval is exact whenever the standard population is
 proportional to the study population: with those weights it reduces to the
@@ -80,6 +81,9 @@ estimand; do not make area-specific exclusions.
 
 A zero \emph{standard} population is allowed. It gives the stratum a weight of
 zero, which is how a standard population legitimately excludes an age band.
+The \code{cases} and \code{population} columns of the result are still totals over
+every stratum, including excluded ones, so they need not match the strata
+the rate describes. \code{\link[=islh_dsr_detail]{islh_dsr_detail()}} shows each stratum's weight.
 
 Intervals assume independent Poisson counts and fixed denominators.
 Recurrent events may be clustered; accepting these counts does not establish

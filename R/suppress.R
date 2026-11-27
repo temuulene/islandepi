@@ -53,8 +53,7 @@ islh_suppress <- function(n, threshold, inclusive = TRUE, label = NULL) {
     return(counts)
   }
 
-  output <- as.character(counts)
-  output[is.na(counts)] <- NA_character_
+  output <- .islh_format_counts(counts)
   output[small] <- as.character(label)
   output
 }

@@ -189,10 +189,84 @@
   call = rlang::caller_env()
 ) {
   context <- match.arg(context)
+  # Counts recorded for finer groups, such as sites, can be rolled up to
+  # coarser ones, such as areas. Check them at the grouping they were counted
+  # at, then add them up, so a site with a missing period cannot hide behind
+  # another site in the same area.
+  finer <- setdiff(intersect(meta$by, names(work)), by)
+  if (length(finer) > 0L) {
+    # Rows added by a coverage check for a period with no feed at all carry
+    # no finer group. Give each of the group's sites an unknown row for that
+    # period, so the site-level check does not report it as missing and the
+    # rolled-up count stays unknown.
+    placeholder <- is.na(work$.islh_value) &
+      rowSums(!is.na(work[finer])) == 0L
+    filled <- work[placeholder, c(by, ".islh_date"), drop = FALSE]
+    work <- work[!placeholder, , drop = FALSE]
+    leftover <- filled[FALSE, , drop = FALSE]
+    if (nrow(filled) > 0L) {
+      sites <- unique(work[c(by, finer)])
+      expanded <- if (length(by) > 0L) {
+        dplyr::inner_join(
+          filled,
+          sites,
+          by = by,
+          relationship = "many-to-many",
+          na_matches = "na"
+        )
+      } else {
+        dplyr::cross_join(filled, sites)
+      }
+      expanded$.islh_value <- rep(NA_real_, nrow(expanded))
+      if ("partial_period" %in% names(work)) {
+        expanded$partial_period <- rep(FALSE, nrow(expanded))
+      }
+      work <- dplyr::bind_rows(work, expanded)
+      # A group with no site rows at all stays unknown at the coarser level.
+      if (length(by) > 0L) {
+        leftover <- filled[
+          is.na(.islh_key_match(filled, sites, by)),
+          ,
+          drop = FALSE
+        ]
+      } else if (nrow(sites) == 0L) {
+        leftover <- filled
+      }
+    }
+    leftover$.islh_value <- rep(NA_real_, nrow(leftover))
+    source <- .islh_surv_complete_source(
+      work,
+      c(by, finer),
+      list(
+        interval = meta$interval,
+        periods = meta$periods,
+        week_start = meta$week_start
+      ),
+      from,
+      to,
+      policy,
+      context = context,
+      call = call
+    )
+    work <- dplyr::summarise(
+      dplyr::group_by(
+        source,
+        dplyr::across(tidyselect::all_of(c(by, ".islh_date")))
+      ),
+      .islh_value = sum(.data$.islh_value),
+      .groups = "drop"
+    )
+    work <- as.data.frame(dplyr::bind_rows(work, leftover))
+  }
   keys <- c(by, ".islh_date")
   if (anyDuplicated(work[keys])) {
     .islh_abort(
-      "Source counts must contain one row per group and period.",
+      c(
+        "Source counts must contain one row per group and period.",
+        i = "If the rows are for finer groups, include those columns in
+             {.arg by}, or build the counts with {.fn islh_count_events},
+             which records them."
+      ),
       call = call
     )
   }
@@ -220,13 +294,15 @@
     )
   }
   selected <- work$.islh_date >= from & work$.islh_date <= to
-  .islh_surv_check_partial(work, selected, call = call)
+  if (length(finer) == 0L) {
+    .islh_surv_check_partial(work, selected, call = call)
+  }
   dates <- .islh_surv_period_sequence(starts, last, meta$interval)
   # `groups` is the roster that must appear even without rows, such as an
   # expected site that sent nothing.
   grid <- .islh_surv_grid(groups %||% unique(work[by]), dates, by)
   names(grid)[names(grid) == "period_start"] <- ".islh_date"
-  work$.islh_present <- TRUE
+  work$.islh_present <- rep(TRUE, nrow(work))
   out <- dplyr::left_join(
     grid,
     work[c(keys, ".islh_value", ".islh_present")],

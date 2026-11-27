@@ -21,7 +21,10 @@
 #' @return A plain `data.frame` with the chosen columns and row names
 #'   `1:nrow(data)`. Each column keeps only the attributes that define its type
 #'   (`class`, `levels`, `tzone` and `units`), so dates, factors and times
-#'   still work.
+#'   still work. `POSIXlt` times are converted to `POSIXct`. Columns of other
+#'   classes, matrix columns and S4 objects are refused, because removing
+#'   their attributes would change or break them; convert them to plain
+#'   values first.
 #' @export
 #'
 #' @examples
@@ -49,7 +52,14 @@ islh_release_copy <- function(data, cols) {
   }
   cols <- .islh_check_cols(cols, data, purpose = "release")
 
-  nested <- cols[!vapply(data[cols], is.atomic, logical(1))]
+  # unclass() takes exactly the named columns. A subclass such as sf adds its
+  # geometry to every subset of columns.
+  columns <- unclass(data)[cols]
+  columns <- lapply(columns, function(column) {
+    if (inherits(column, "POSIXlt")) as.POSIXct(column) else column
+  })
+
+  nested <- cols[!vapply(columns, is.atomic, logical(1))]
   if (length(nested) > 0L) {
     .islh_abort(c(
       "{.field {nested}} {?is a list column/are list columns}.",
@@ -60,8 +70,42 @@ islh_release_copy <- function(data, cols) {
     ))
   }
 
+  # Only classes whose meaning survives keeping just these attributes. A
+  # time series loses its `tsp`, and a matrix column its shape, which would
+  # leave a corrupted table.
+  safe_classes <- c(
+    "factor",
+    "ordered",
+    "Date",
+    "POSIXct",
+    "POSIXt",
+    "difftime",
+    "integer64"
+  )
+  unsafe <- cols[vapply(
+    columns,
+    function(column) {
+      isS4(column) ||
+        !is.null(dim(column)) ||
+        (is.object(column) && !all(class(column) %in% safe_classes))
+    },
+    logical(1)
+  )]
+  if (length(unsafe) > 0L) {
+    .islh_abort(c(
+      "{.field {unsafe}} cannot be copied safely.",
+      x = "{cli::qty(length(unsafe))}{?It is a matrix, S4 or other classed
+           column/They are matrix, S4 or other classed columns} whose
+           working attributes cannot be removed without changing
+           {?it/them}.",
+      i = "Convert {cli::qty(length(unsafe))}{?it/them} to plain values first,
+           for example with
+           {.fn as.vector}, {.fn as.numeric} or {.fn as.character}."
+    ))
+  }
+
   keep <- c("class", "levels", "tzone", "units")
-  out <- lapply(data[cols], function(column) {
+  out <- lapply(columns, function(column) {
     attributes(column) <- attributes(column)[intersect(
       names(attributes(column)),
       keep

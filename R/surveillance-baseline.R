@@ -108,6 +108,7 @@ islh_surveillance_baseline <- function(
     !is.numeric(minimum_periods) ||
       length(minimum_periods) != 1L ||
       is.na(minimum_periods) ||
+      !is.finite(minimum_periods) ||
       minimum_periods != round(minimum_periods) ||
       minimum_periods < 1L
   ) {
@@ -219,15 +220,7 @@ islh_surveillance_baseline <- function(
     reference_week_start,
     work$.islh_date
   )
-  if (
-    "partial_period" %in%
-      names(work) &&
-      any(is.na(work$partial_period) | work$partial_period)
-  ) {
-    .islh_abort(
-      "The baseline contains partial periods; use complete reference periods."
-    )
-  }
+  .islh_surv_check_partial(work)
   expected_dates <- if (!is.null(reference_periods)) {
     sort(unique(reference_periods))
   } else {

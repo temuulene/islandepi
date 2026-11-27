@@ -16,11 +16,22 @@
 #' recovers the value. Complementary suppression hides the next-smallest cell
 #' as well so the arithmetic no longer closes.
 #'
+#' Several small cells hidden together can still give themselves away. The
+#' reader recovers their combined value by subtraction, and knows each one is
+#' at least 1. Two hidden cells that add to 2 must both be 1. So a block also
+#' gets a complementary cell when the small cells hidden in it add up to a
+#' value the rule would itself suppress, or to a value that has only one
+#' solution: every cell equal to 1, or every cell equal to the largest value
+#' the rule suppresses.
+#'
 #' A complementary cell is hidden because of where it sits in the table, not
-#' because it is small — it can be any size at all. It therefore never takes
-#' `label`, which describes a small value. It takes `complementary_label`,
-#' which defaults to a neutral `"Suppressed"`. Labelling a complementary cell
-#' `"<5"` would publish a false statement about the data.
+#' because it is small — it can be any size at all. So it must not carry a
+#' label that states a bound, such as `"<5"`. It also must not carry a label
+#' different from the small cells: if the small cells show `"<5"` and the
+#' complementary cell shows `"Suppressed"`, a reader knows which is which, and
+#' with a total in view can often work out both values. When `complementary =
+#' TRUE` and `label` is set, every hidden cell shows `label`, which must be
+#' neutral text such as `"Suppressed"` or `"*"`.
 #'
 #' Whether you need complementary suppression, and how many cells to hide, is a
 #' disclosure policy question rather than a statistical one. Check the rule your
@@ -98,16 +109,21 @@
 #' @param label Display label for cells hidden because they are small. With
 #'   `NULL`, they become missing numeric values. See the label section of
 #'   [islh_suppress()].
-#' @param complementary Also suppress the smallest surviving value wherever
-#'   exactly one cell was suppressed. Must be one non-missing `TRUE` or
-#'   `FALSE`.
+#' @param complementary Also suppress the smallest surviving value in each
+#'   block where the hidden cells could otherwise be worked out: one hidden
+#'   cell, or several whose combined value is small or has only one solution.
+#'   See the complementary suppression section. Must be one non-missing `TRUE`
+#'   or `FALSE`.
 #' @param complementary_label Display label for cells hidden to protect another
-#'   cell. Must not imply a value, since such a cell can be any size. Only used
+#'   cell. Defaults to `label`, and must be the same as `label`, so the table
+#'   does not show which hidden cells are small. Neither may imply a value,
+#'   such as `"<5"`, since a complementary cell can be any size. Only used
 #'   when `label` is set; with no `label` every suppressed cell becomes a
 #'   missing value and the column stays numeric.
 #' @param by Optional column names identifying the groups the complementary
-#'   rule applies within. See the groups section. Ignored when
-#'   `complementary = FALSE`.
+#'   rule applies within. See the groups section. With
+#'   `complementary = FALSE`, `by` only labels the audit record. A grouped
+#'   tibble's groups are not used: name them in `by`.
 #' @param linked Optional named list linking each count column to the columns
 #'   calculated from it, such as `list(cases = c("rate", "lower", "upper"))`.
 #'   See the linked-columns section.
@@ -128,8 +144,8 @@
 #' islh_suppress_table(counts, c("cases", "contacts"), threshold = 5)
 #'
 #' # With a total in view, one suppressed cell can be recovered by
-#' # subtraction, so a second is hidden. Note that the second cell is 17, and
-#' # is labelled as suppressed rather than as small.
+#' # subtraction, so a second is hidden. Note that the second cell is 17. Both
+#' # carry the same label, so the table does not say which one is small.
 #' islh_suppress_table(
 #'   counts, "cases", threshold = 5,
 #'   complementary = TRUE, label = "Suppressed"
@@ -166,7 +182,7 @@ islh_suppress_table <- function(
   inclusive = TRUE,
   label = NULL,
   complementary = FALSE,
-  complementary_label = "Suppressed",
+  complementary_label = label,
   by = NULL,
   linked = NULL,
   linked_label = NULL
@@ -183,15 +199,38 @@ islh_suppress_table <- function(
     inclusive = inclusive
   )
   if (!is.null(label) && complementary) {
+    # Every hidden cell shows `label`, so it must not state a bound that a
+    # complementary cell could break.
+    .islh_check_suppression_label(label, complementary = TRUE)
     complementary_label <- .islh_check_suppression_label(
       complementary_label,
       arg = "complementary_label",
       complementary = TRUE
     )
+    if (!identical(label, complementary_label)) {
+      .islh_abort(c(
+        "{.arg label} and {.arg complementary_label} must be the same.",
+        x = "Different labels show which hidden cells are small. With a total
+             in view, a reader can then often work out their values.",
+        i = "Leave {.arg complementary_label} out, so it takes the value of
+             {.arg label}, or set both to one neutral text such as
+             {.val Suppressed}."
+      ))
+    }
   }
 
   cols <- .islh_check_cols(cols, data)
   by <- .islh_check_by(by, data, cols)
+  if (complementary && length(by) == 0L && dplyr::is_grouped_df(data)) {
+    grouping <- dplyr::group_vars(data)
+    .islh_abort(c(
+      "{.arg data} is grouped, but {.arg by} is not set.",
+      x = "The complementary rule would run over the whole column, not within
+           each group, so a cell could be recovered from a group subtotal.",
+      i = "Name the groups with {.code by = c({.val {grouping}})}, or
+           {.fn dplyr::ungroup} the data if the column has one total."
+    ))
+  }
   linked <- .islh_check_linked(linked, data, cols, by)
   if (length(linked) > 0L) {
     linked_label <- .islh_check_suppression_label(
@@ -203,21 +242,26 @@ islh_suppress_table <- function(
 
   # One label per row naming the block it belongs to. With no `by` every row is
   # in the same block, which is the whole-column rule.
+  # unclass() reads only the named columns. A data frame subclass such as sf
+  # adds its geometry to every subset, which would end up in the labels.
+  columns <- unclass(data)
   groups <- if (length(by) == 0L) {
     rep("", nrow(data))
   } else {
-    do.call(paste, c(unname(as.list(data[by])), list(sep = " | ")))
+    do.call(paste, c(unname(columns[by]), list(sep = " | ")))
   }
 
   group_id <- if (length(by) == 0L) {
     rep(1L, nrow(data))
   } else {
-    dplyr::group_indices(dplyr::group_by(
-      data,
-      dplyr::across(tidyselect::all_of(by)),
-      .drop = FALSE
-    ))
+    keys <- structure(
+      columns[by],
+      class = "data.frame",
+      row.names = c(NA_integer_, -nrow(data))
+    )
+    .islh_key_ids(list(keys), by)[[1]]
   }
+  largest <- if (inclusive) floor(threshold) else ceiling(threshold) - 1
 
   audit <- vector("list", length(cols))
   names(audit) <- cols
@@ -231,10 +275,14 @@ islh_suppress_table <- function(
     if (isTRUE(complementary)) {
       for (group in unique(group_id)) {
         rows <- which(group_id == group)
-        # Exactly one hidden cell is the recoverable case: a reader subtracts
-        # the visible cells from the total and gets it back. Hide the smallest
-        # survivor too. Two or more already break that arithmetic.
-        if (sum(small[rows]) != 1L) {
+        if (
+          !.islh_needs_complementary(
+            counts[rows][small[rows]],
+            threshold,
+            inclusive,
+            largest
+          )
+        ) {
           next
         }
         survivors <- counts[rows]
@@ -262,8 +310,7 @@ islh_suppress_table <- function(
       next
     }
 
-    output <- as.character(counts)
-    output[is.na(counts)] <- NA_character_
+    output <- .islh_format_counts(counts)
     output[small] <- as.character(label)
     output[extra] <- if (is.null(complementary_label)) {
       NA_character_
@@ -289,16 +336,64 @@ islh_suppress_table <- function(
     if (is.null(linked_label)) {
       data[[target]][rows] <- NA
     } else {
-      values <- data[[target]]
-      output <- as.character(values)
-      output[is.na(values)] <- NA_character_
+      output <- .islh_format_values(data[[target]])
       output[rows] <- linked_label
       data[[target]] <- output
     }
   }
 
-  attr(data, "islh_suppression") <- .islh_bind_audit(audit)
+  # A table suppressed in more than one call keeps every call's record.
+  earlier <- attr(data, "islh_suppression", exact = TRUE)
+  record <- .islh_bind_audit(audit)
+  if (is.data.frame(earlier) && nrow(earlier) > 0L) {
+    record <- rbind(earlier[names(record)], record)
+    record <- record[!duplicated(record), , drop = FALSE]
+    rownames(record) <- NULL
+  }
+  attr(data, "islh_suppression") <- record
   .islh_drop_detail(data)
+}
+
+# Can a reader work out the small cells hidden in one block? They subtract
+# the visible cells from the total and get the hidden cells' combined value,
+# and they know each hidden cell is between 1 and the largest value the rule
+# suppresses. One hidden cell is recovered outright. Several are recovered
+# when their combined value is itself small (it then discloses a small group
+# of people) or has only one solution: every cell 1, or every cell at the
+# largest suppressible value.
+.islh_needs_complementary <- function(hidden, threshold, inclusive, largest) {
+  k <- length(hidden)
+  if (k == 0L) {
+    return(FALSE)
+  }
+  combined <- sum(hidden)
+  .islh_small(combined, threshold, inclusive) ||
+    combined == k ||
+    combined == k * largest
+}
+
+# Whole counts as text. as.character() writes 100000 as "1e+05".
+.islh_format_counts <- function(x) {
+  out <- rep(NA_character_, length(x))
+  present <- !is.na(x)
+  out[present] <- sprintf("%.0f", x[present])
+  out
+}
+
+# Any column as text, with numbers written out in full rather than in
+# scientific notation.
+.islh_format_values <- function(x) {
+  out <- as.character(x)
+  if (is.numeric(x) && !is.object(x)) {
+    scientific <- !is.na(out) & grepl("e", out, fixed = TRUE)
+    out[scientific] <- vapply(
+      x[scientific],
+      function(v) format(v, scientific = FALSE, digits = 15, trim = TRUE),
+      character(1)
+    )
+  }
+  out[is.na(x)] <- NA_character_
+  out
 }
 
 # Calculation detail the package attaches to a result, such as the stratum
@@ -359,13 +454,30 @@ islh_suppress_table <- function(
       call = call
     )
   }
-  targets <- unlist(linked, use.names = FALSE)
-  if (!is.character(targets) || length(targets) == 0L || anyNA(targets)) {
+  # Check each entry, not the flattened list: unlist() also flattens a
+  # nested list into names, which then match no column and hide nothing.
+  valid <- vapply(
+    linked,
+    function(x) {
+      is.character(x) &&
+        length(x) > 0L &&
+        !anyNA(x) &&
+        all(nzchar(trimws(x)))
+    },
+    logical(1)
+  )
+  if (!all(valid)) {
     .islh_abort(
-      "{.arg linked} must give column names for each count.",
+      c(
+        "{.arg linked} must give column names for each count.",
+        x = "Not a character vector of column names:
+             {.field {sources[!valid]}}.",
+        i = "For example, {.code list(cases = c(\"rate\", \"lower\"))}."
+      ),
       call = call
     )
   }
+  targets <- unlist(linked, use.names = FALSE)
   unknown <- setdiff(targets, names(data))
   if (length(unknown) > 0L) {
     .islh_abort(
@@ -512,6 +624,9 @@ islh_round_base <- function(x, base, method = c("nearest", "random")) {
       x = "Rounding to {base} gives counts that are not whole."
     ))
   }
+  # Within the tolerance above, snap to the whole number, so 5 + 1e-10 does
+  # not leave a fraction in every result.
+  base <- round(base)
   x <- .islh_check_counts(x, arg = "x")
 
   if (method == "nearest") {

@@ -94,7 +94,7 @@ islh_reporting_delay <- function(
   by_names <- prepared$by
   .islh_surv_check_reserved(
     by_names,
-    c("n", "mean_delay", "longest_delay", paste0("delay_p", probs * 100))
+    c("n", "mean_delay", "longest_delay", .islh_delay_quantile_names(probs))
   )
   if (nrow(work) == 0L) {
     .islh_abort("No records remain to summarize.")
@@ -115,13 +115,19 @@ islh_reporting_delay <- function(
       .groups = "drop"
     )
   quantiles <- do.call(rbind, summary$.quantiles)
-  colnames(quantiles) <- paste0("delay_p", format(probs * 100, trim = TRUE))
+  colnames(quantiles) <- .islh_delay_quantile_names(probs)
   out <- cbind(
     as.data.frame(summary[c(by_names, "n", "mean_delay")]),
     as.data.frame(quantiles),
     longest_delay = summary$longest_delay
   )
   out
+}
+
+# "delay_p50", "delay_p97.5". Each name is written on its own: format() on
+# the vector pads every value to the same decimals, giving "delay_p50.0".
+.islh_delay_quantile_names <- function(probs) {
+  paste0("delay_p", as.character(probs * 100))
 }
 
 #' Expected completeness of recent counts
@@ -289,11 +295,14 @@ islh_reporting_completeness <- function(
     learn_from <- min(learn$.islh_onset)
   }
 
-  beyond <- sum(learn$.islh_delay > maturity)
+  # Every record old enough to be mature can show a slow tail, not only the
+  # ones in the learning window. With a short window, such as one day, no
+  # record in it can have taken longer than `maturity`.
+  beyond <- sum(work$.islh_onset <= learn_to & work$.islh_delay > maturity)
   if (beyond > 0L) {
     .islh_warn(
       c(
-        "{beyond} learned record{?s} took longer than {.arg maturity}
+        "{beyond} mature record{?s} took longer than {.arg maturity}
          ({maturity} day{?s}) to arrive.",
         x = "Records still arrive after {maturity} day{?s}, so the assumption
              behind {.field expected_complete} does not hold, and the values
@@ -387,7 +396,9 @@ islh_reporting_completeness <- function(
   negative <- !unusable & work$.islh_report < work$.islh_onset
 
   if (is.null(as_of)) {
-    usable_reports <- work$.islh_report[!unusable]
+    # A report dated before its onset is dropped as an error below, so it
+    # must not set the cutoff either.
+    usable_reports <- work$.islh_report[!unusable & !negative]
     if (length(usable_reports) == 0L) {
       .islh_abort("No records have usable dates.", call = call)
     }
@@ -447,6 +458,7 @@ islh_reporting_completeness <- function(
     !is.numeric(max_delay) ||
       length(max_delay) != 1L ||
       is.na(max_delay) ||
+      !is.finite(max_delay) ||
       max_delay != round(max_delay) ||
       max_delay < 1
   ) {

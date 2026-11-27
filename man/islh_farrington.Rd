@@ -64,9 +64,9 @@ the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.
 \value{
 One row per group and week in \code{from} to \code{to}: the grouping
 columns, \code{period_start}, \code{observed}, \code{expected}, \code{upper_limit}, \code{alarm},
-\code{pvalue} and \code{status}. \code{alarm} is \code{NA} for any week not assessed; see the
-section on weeks that are not assessed. \code{pvalue} is the model's, and is
-reported even when the low-count rule sets a week aside.
+\code{pvalue} and \code{status}. \code{alarm} is \code{NA} for any week not assessed, and
+\code{expected}, \code{upper_limit} and \code{pvalue} are \code{NA} for a week the low-count
+rule sets aside; see the section on weeks that are not assessed.
 }
 \description{
 \code{islh_farrington()} runs the improved Farrington algorithm from the
@@ -106,7 +106,7 @@ the model sees.
 \item \code{"low_count_rule"}: fewer than \code{low_count} cases in the last
 \code{low_count_weeks} weeks, counting the week assessed. The method does not
 assess such weeks, to avoid alarms on very small counts, so \code{alarm},
-\code{expected} and \code{upper_limit} are \code{NA}.
+\code{expected}, \code{upper_limit} and \code{pvalue} are \code{NA}.
 \item \code{"fit_failed"}: the model could not be fitted, and \code{alarm} is \code{NA}.
 }
 

@@ -55,7 +55,7 @@ test_that("the seasonal counts are complete weekly counts with metadata", {
   x <- islh_seasons
   expect_equal(nrow(x), 1095L)
   expect_equal(attr(x, "islh_interval"), "week")
-  expect_true(all(weekdays(x$period_start) == "Monday"))
+  expect_true(all(format(x$period_start, "%u") == "1"))
   expect_equal(nrow(x), 3 * length(unique(x$period_start)))
   expect_false(any(x$partial_period))
   season <- islh_reporting_calendar(x$period_start, season_start_month = 9)

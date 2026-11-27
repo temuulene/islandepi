@@ -61,6 +61,14 @@ islh_dsr_joined <- function(
   ) {
     .islh_abort("{.arg by} must name unique stratum columns.")
   }
+  reserved <- by[by %in% .islh_dsr_detail_columns | startsWith(by, ".islh_")]
+  if (length(reserved) > 0L) {
+    .islh_abort(c(
+      "{.arg by} uses names reserved for the stratum detail.",
+      x = "Reserved: {.val {reserved}}.",
+      i = "Rename the key {cli::qty(length(reserved))}column{?s} first."
+    ))
+  }
   if (
     missing(standard_id) ||
       !is.character(standard_id) ||
@@ -70,7 +78,14 @@ islh_dsr_joined <- function(
   ) {
     .islh_abort("Supply a non-empty {.arg standard_id} including its vintage.")
   }
+  # Plain data frames from here: a grouped tibble or other subclass can carry
+  # columns and grouping into the subsets taken below.
   tables <- list(events = events, population = population, standard = standard)
+  for (i in seq_along(tables)) {
+    if (is.data.frame(tables[[i]])) {
+      tables[[i]] <- as.data.frame(dplyr::ungroup(tables[[i]]))
+    }
+  }
   values <- list(cases, denominator, weight)
   value_args <- c("cases", "denominator", "weight")
   for (i in seq_along(tables)) {
@@ -111,8 +126,17 @@ islh_dsr_joined <- function(
       ))
     }
     if (i > 1L) {
-      extra <- dplyr::anti_join(tab[by], events[by], by = by)
-      absent <- dplyr::anti_join(events[by], tab[by], by = by)
+      .islh_check_key_columns(tab, tables$events, by, table_arg, "events")
+      extra <- tab[
+        is.na(.islh_key_match(tab, tables$events, by)),
+        by,
+        drop = FALSE
+      ]
+      absent <- tables$events[
+        is.na(.islh_key_match(tables$events, tab, by)),
+        by,
+        drop = FALSE
+      ]
       if (nrow(extra) || nrow(absent)) {
         .islh_abort(c(
           "The strata in {.arg {table_arg}} do not match those in
@@ -130,31 +154,50 @@ islh_dsr_joined <- function(
       }
     }
   }
-  aligned <- lapply(seq_along(tables), function(i) {
-    tab <- tables[[i]][c(by, values[[i]])]
-    names(tab)[ncol(tab)] <- ".islh_measure"
-    dplyr::left_join(
-      events[by],
-      tab,
-      by = by,
-      relationship = "one-to-one"
-    )$.islh_measure
-  })
-  result <- islh_dsr(
-    aligned[[1]],
-    aligned[[2]],
-    aligned[[3]],
-    standard_id = standard_id,
-    strata = seq_len(nrow(events)),
-    ...
-  )
-  attr(result, "islh_strata") <- events[by]
-  detail <- attr(result, "islh_dsr_strata")
+  events <- tables$events
   keys <- events[by]
   rownames(keys) <- NULL
+  # Key positions in each table, matched as values: factors match by label,
+  # whatever their levels or ordering.
+  aligned <- lapply(seq_along(tables), function(i) {
+    tab <- tables[[i]]
+    tab[[values[[i]]]][.islh_key_match(keys, tab, by)]
+  })
+  labels <- .islh_dsr_stratum_labels(keys)
+  dsr_call <- rlang::current_env()
+  result <- withCallingHandlers(
+    islh_dsr(
+      aligned[[1]],
+      aligned[[2]],
+      aligned[[3]],
+      standard_id = standard_id,
+      strata = labels,
+      ...
+    ),
+    islh_error = function(error) {
+      .islh_abort(
+        "Could not standardize the joined tables.",
+        parent = error,
+        call = dsr_call
+      )
+    }
+  )
+  attr(result, "islh_strata") <- keys
+  detail <- attr(result, "islh_dsr_strata")
   attr(result, "islh_dsr_strata") <- cbind(
     as.data.frame(keys),
     detail[setdiff(names(detail), "stratum")]
   )
   result
 }
+
+# Columns of the stratum detail other than the stratum keys.
+.islh_dsr_detail_columns <- c(
+  "stratum",
+  "cases",
+  "population",
+  "weight",
+  "rate",
+  "contribution",
+  "variance_share"
+)

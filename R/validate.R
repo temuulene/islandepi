@@ -83,6 +83,13 @@
     )
   }
 
+  # Return exact whole numbers. A value within the tolerance above, such as
+  # 5 + 1e-15 from floating-point arithmetic, would otherwise escape a
+  # `<= 5` suppression rule, and 1e-15 would pass for a positive count.
+  # Double storage also keeps later arithmetic clear of 32-bit integer
+  # overflow, which returns NA.
+  x[present] <- round(x[present])
+  storage.mode(x) <- "double"
   x
 }
 
@@ -233,16 +240,15 @@
     return(label)
   }
 
+  # The label goes into messages as a cli value, never as part of the
+  # template, so braces in it are shown rather than evaluated.
   if (isTRUE(complementary)) {
     .islh_abort(
       c(
         "{.arg {arg}} must not state a numeric bound.",
-        x = paste0(
-          "A complementary cell can be any size, so \"",
-          label,
-          "\" may be false."
-        ),
-        i = "Use a neutral label such as \"Suppressed\"."
+        x = "A complementary cell can be any size, so {.val {label}} may be
+             false.",
+        i = "Use a neutral label such as {.val Suppressed}."
       ),
       call = call
     )
@@ -262,23 +268,15 @@
   truthful <- if (operator == "<") largest < bound else largest <= bound
 
   if (!truthful) {
+    below <- paste0("<", largest + 1)
+    at_most <- paste0("<=", largest)
     .islh_abort(
       c(
         "{.arg {arg}} does not describe every count the rule suppresses.",
-        x = paste0(
-          "The rule can suppress ",
-          largest,
-          ", which is not described by \"",
-          label,
-          "\"."
-        ),
-        i = paste0(
-          "Use \"<",
-          largest + 1,
-          "\", \"<=",
-          largest,
-          "\", or a neutral label such as \"Suppressed\"."
-        )
+        x = "The rule can suppress {largest}, which is not described by
+             {.val {label}}.",
+        i = "Use {.val {below}}, {.val {at_most}}, or a neutral label such as
+             {.val Suppressed}."
       ),
       call = call
     )
@@ -309,6 +307,30 @@
         "{.arg {arg}} must name the columns to {purpose}.",
         i = "There is no default: choosing the columns is a decision the
            caller has to make."
+      ),
+      call = call
+    )
+  }
+
+  # Columns are read and written by name, and a repeated name always reaches
+  # the first column with it. Position 2 of a table with two `cases` columns
+  # would suppress or release column 1 instead.
+  column_names <- names(data)
+  blank <- is.na(column_names) | !nzchar(trimws(column_names))
+  repeated_names <- unique(column_names[!blank & duplicated(column_names)])
+  if (any(blank) || length(repeated_names) > 0L) {
+    .islh_abort(
+      c(
+        "{.arg data} must have unique, non-empty column names.",
+        x = if (length(repeated_names) > 0L) {
+          "Repeated: {.field {repeated_names}}."
+        },
+        x = if (any(blank)) {
+          "{cli::qty(sum(blank))}Position{?s} {.val {which(blank)}} {?has/have}
+           no name."
+        },
+        i = "Rename the columns first, for example with
+             {.code names(data) <- make.unique(names(data))}."
       ),
       call = call
     )

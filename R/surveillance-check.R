@@ -29,7 +29,9 @@
 #'   be in order, written `c(later = "earlier")`. For example,
 #'   `c(date_reported = "date_onset")` reports a record whose report date falls
 #'   before its onset date as `"date_out_of_order"`. Dates on the same day
-#'   pass.
+#'   pass. A later date can be checked against several earlier ones by
+#'   repeating its name, as in
+#'   `c(date_outcome = "date_onset", date_outcome = "date_admission")`.
 #'
 #' @return A data frame with `.row`, `.id`, `.issue`, `.field` and `.value`.
 #'   A valid input returns a zero-row data frame with the same columns.
@@ -236,20 +238,28 @@ islh_check_events <- function(
     )
   }
 
-  for (later in names(date_order)) {
-    earlier <- date_order[[later]]
-    later_info <- .islh_surv_date_info(data[[later]], timezone)
-    earlier_info <- .islh_surv_date_info(data[[earlier]], timezone)
-    # The event date's own invalid values are already reported above.
-    for (field in setdiff(c(later, earlier), date_name)) {
-      info <- if (field == later) later_info else earlier_info
-      issues[[length(issues) + 1L]] <- issue_rows(
-        info$invalid,
-        "invalid_date",
-        field,
-        data[[field]]
-      )
-    }
+  # Each date column is read, and its invalid values reported, once, however
+  # many rules name it. Rules are taken by position, because the same later
+  # column can be checked against several earlier ones.
+  order_fields <- unique(c(names(date_order), unname(date_order)))
+  order_info <- lapply(
+    stats::setNames(order_fields, order_fields),
+    function(field) .islh_surv_date_info(data[[field]], timezone)
+  )
+  # The event date's own invalid values are already reported above.
+  for (field in setdiff(order_fields, date_name)) {
+    issues[[length(issues) + 1L]] <- issue_rows(
+      order_info[[field]]$invalid,
+      "invalid_date",
+      field,
+      data[[field]]
+    )
+  }
+  for (rule in seq_along(date_order)) {
+    later <- names(date_order)[[rule]]
+    earlier <- unname(date_order)[[rule]]
+    later_info <- order_info[[later]]
+    earlier_info <- order_info[[earlier]]
     usable <- !later_info$missing &
       !later_info$invalid &
       !earlier_info$missing &
@@ -364,6 +374,14 @@ islh_check_events <- function(
   if (length(same) > 0L) {
     .islh_abort(
       "{.arg date_order} compares {.field {same}} with itself.",
+      call = call
+    )
+  }
+  rules <- paste(later, unname(date_order), sep = "\r")
+  if (anyDuplicated(rules)) {
+    repeated <- unique(later[duplicated(rules)])
+    .islh_abort(
+      "{.arg date_order} repeats a rule for {.field {repeated}}.",
       call = call
     )
   }

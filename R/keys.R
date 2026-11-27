@@ -15,9 +15,17 @@
   if (length(cols) == 0L) {
     return(lapply(sizes, function(n) rep(1L, n)))
   }
+  # Factors match by their labels. Combining an ordered factor with a plain
+  # one, or factors with different levels, is an error in vctrs, so compare
+  # them as text.
   stacked <- dplyr::bind_rows(lapply(tables, function(x) {
     x <- as.data.frame(x)[cols]
     rownames(x) <- NULL
+    for (col in cols) {
+      if (is.factor(x[[col]])) {
+        x[[col]] <- as.character(x[[col]])
+      }
+    }
     x
   }))
   ids <- dplyr::group_indices(dplyr::group_by(
