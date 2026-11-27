@@ -34,18 +34,22 @@ threshold. Must be one non-missing \code{TRUE} or \code{FALSE}.}
 \code{NULL}, they become missing numeric values. See the label section of
 \code{\link[=islh_suppress]{islh_suppress()}}.}
 
-\item{complementary}{Also suppress the smallest surviving value wherever
-exactly one cell was suppressed. Must be one non-missing \code{TRUE} or
-\code{FALSE}.}
+\item{complementary}{Also suppress the smallest surviving value in each
+block where the hidden cells could otherwise be worked out: one hidden
+cell, or several whose combined value is small or has only one solution.
+See the complementary suppression section. Must be one non-missing \code{TRUE}
+or \code{FALSE}.}
 
 \item{complementary_label}{Display label for cells hidden to protect another
-cell. Must not imply a value, since such a cell can be any size. Only used
-when \code{label} is set; with no \code{label} every suppressed cell becomes a
-missing value and the column stays numeric.}
+cell. Must not imply a value, since such a cell can be any size, and must
+be the same as \code{label}, so the table does not show which hidden cells are
+small. Only used when \code{label} is set; with no \code{label} every suppressed
+cell becomes a missing value and the column stays numeric.}
 
 \item{by}{Optional column names identifying the groups the complementary
-rule applies within. See the groups section. Ignored when
-\code{complementary = FALSE}.}
+rule applies within. See the groups section. With
+\code{complementary = FALSE}, \code{by} only labels the audit record. A grouped
+tibble's groups are not used: name them in \code{by}.}
 
 \item{linked}{Optional named list linking each count column to the columns
 calculated from it, such as \code{list(cases = c("rate", "lower", "upper"))}.
@@ -70,11 +74,21 @@ does not protect it: a reader subtracts the visible cells from the total and
 recovers the value. Complementary suppression hides the next-smallest cell
 as well so the arithmetic no longer closes.
 
+Several small cells hidden together can still give themselves away. The
+reader recovers their combined value by subtraction, and knows each one is
+at least 1. Two hidden cells that add to 2 must both be 1. So a block also
+gets a complementary cell when the small cells hidden in it add up to a
+value the rule would itself suppress, or to a value that has only one
+solution: every cell equal to 1, or every cell equal to the largest value
+the rule suppresses.
+
 A complementary cell is hidden because of where it sits in the table, not
-because it is small — it can be any size at all. It therefore never takes
-\code{label}, which describes a small value. It takes \code{complementary_label},
-which defaults to a neutral \code{"Suppressed"}. Labelling a complementary cell
-\code{"<5"} would publish a false statement about the data.
+because it is small — it can be any size at all. So it must not carry a
+label that states a bound, such as \code{"<5"}. It also must not carry a label
+different from the small cells: if the small cells show \code{"<5"} and the
+complementary cell shows \code{"Suppressed"}, a reader knows which is which, and
+with a total in view can often work out both values. When \code{complementary = TRUE} and \code{label} is set, \code{label} and \code{complementary_label} must be the
+same neutral text, such as \code{"Suppressed"}.
 
 Whether you need complementary suppression, and how many cells to hide, is a
 disclosure policy question rather than a statistical one. Check the rule your
@@ -162,8 +176,8 @@ counts <- dplyr::tibble(
 islh_suppress_table(counts, c("cases", "contacts"), threshold = 5)
 
 # With a total in view, one suppressed cell can be recovered by
-# subtraction, so a second is hidden. Note that the second cell is 17, and
-# is labelled as suppressed rather than as small.
+# subtraction, so a second is hidden. Note that the second cell is 17. Both
+# carry the same label, so the table does not say which one is small.
 islh_suppress_table(
   counts, "cases", threshold = 5,
   complementary = TRUE, label = "Suppressed"

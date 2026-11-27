@@ -70,9 +70,9 @@ test_that("complementary suppression hides a second cell when one is recoverable
 })
 
 test_that("complementary suppression does nothing when the sum is already safe", {
-  # Two cells already suppressed cannot be recovered by subtraction, so no
-  # third cell should be hidden.
-  counts <- data.frame(cases = c(3, 42, 2))
+  # Two hidden cells adding to 7 could be 2 and 5, 3 and 4, and so on, and 7
+  # is above the threshold, so no third cell should be hidden.
+  counts <- data.frame(cases = c(3, 42, 4))
   out <- islh_suppress_table(
     counts,
     "cases",
@@ -154,23 +154,31 @@ test_that("islh_round_base rejects a nonsensical base", {
 # Regression tests for the code review of v0.1.0.
 
 test_that("a complementary cell never claims to be small", {
-  # The bug: with label = "<5", the complementary cell (17) was displayed as
-  # "<5" — a false statement about the data, in a published table.
+  # With label = "<5", the complementary cell (17) was once displayed as
+  # "<5", a false statement about the data. Labelling it "Suppressed" instead
+  # showed which cell was small, so both now share one neutral label.
   counts <- data.frame(cases = c(3, 42, 17))
+
+  expect_error(
+    islh_suppress_table(
+      counts,
+      "cases",
+      threshold = 5,
+      inclusive = FALSE,
+      complementary = TRUE,
+      label = "<5"
+    ),
+    "must be the same"
+  )
 
   out <- islh_suppress_table(
     counts,
     "cases",
     threshold = 5,
-    inclusive = FALSE,
     complementary = TRUE,
-    label = "<5"
+    label = "Suppressed"
   )
-
-  expect_equal(out$cases[1], "<5") # genuinely small
-  expect_equal(out$cases[2], "42") # untouched
-  expect_false(out$cases[3] == "<5") # hidden to protect the first
-  expect_equal(out$cases[3], "Suppressed")
+  expect_equal(out$cases, c("Suppressed", "42", "Suppressed"))
 })
 
 test_that("the output type is decided by label alone", {
