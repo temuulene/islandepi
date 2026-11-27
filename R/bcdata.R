@@ -626,10 +626,12 @@ islh_bc_geography <- function(
     package_word <- if (length(missing) == 1L) "package" else "packages"
     pronoun <- if (length(missing) == 1L) "it" else "them"
     missing_text <- paste(missing, collapse = ", ")
+    # Windows users often have no compiler, so ask for the binary build
+    # there. Elsewhere the default type is right.
     command <- paste0(
       "install.packages(c(",
       paste(sprintf("\"%s\"", missing), collapse = ", "),
-      "))"
+      if (.Platform$OS.type == "windows") "), type = \"binary\")" else "))"
     )
     .islh_abort(
       c(

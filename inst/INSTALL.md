@@ -35,7 +35,10 @@ Each `islandepi` release on
 - `islandepi_<version>.tar.gz`, the source package;
 - `install-phase.R`, the installer used below;
 - `islandepi_<version>_windows-dependencies.csv`, every dependency and the
-  exact version the Windows binary was built, checked and test-installed with.
+  exact version the Windows binary was built, checked and test-installed with;
+- `SHA256SUMS.txt`, the SHA-256 checksum of each file above. To check a
+  download, run `certutil -hashfile <file> SHA256` in a Windows command
+  prompt and compare the result with its line in this file.
 
 Assets are published only after the Windows and Linux build and check jobs
 succeed, and after the Windows ZIP has been installed into an empty library
@@ -55,8 +58,8 @@ version goes with which `islandepi` version.
    dependency manifest. Download the `islandbrand` ZIP from the paired
    `islandbrand` release.
 3. Restart R, so no package is loaded, then in that fresh interactive session
-   `source()` the installer and run it for each package with the actual paths
-   and approved versions:
+   `source()` the installer and run it for each package, one after the other,
+   with the actual paths and approved versions:
 
    ```r
    source("install-phase.R")
@@ -65,11 +68,12 @@ version goes with which `islandepi` version.
    ```
 
    The installer checks that the ZIP's DESCRIPTION matches the package and
-   version, and stops if the package or one of its dependencies is already
-   loaded, since Windows cannot replace a loaded package. It installs the
-   dependencies as CRAN Windows binaries, checks they meet the versions the
-   package requires, installs the package, then loads it and runs a small
-   check calculation. It stops if any step fails or warns.
+   version, and stops if that package is already loaded, since Windows cannot
+   replace a loaded package. It installs the dependencies as CRAN Windows
+   binaries, keeping any that the first install loaded if they are recent
+   enough, checks they meet the versions the package requires, installs the
+   package, then loads it and runs a small check calculation. It stops if any
+   step fails or warns.
 4. Restart R. Save `sessionInfo()`, `packageVersion("islandepi")` and
    `packageVersion("islandbrand")` with the report.
 

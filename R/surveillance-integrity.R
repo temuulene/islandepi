@@ -196,15 +196,42 @@
   finer <- setdiff(intersect(meta$by, names(work)), by)
   if (length(finer) > 0L) {
     # Rows added by a coverage check for a period with no feed at all carry
-    # no finer group. They stay unknown at the coarser level.
+    # no finer group. Give each of the group's sites an unknown row for that
+    # period, so the site-level check does not report it as missing and the
+    # rolled-up count stays unknown.
     placeholder <- is.na(work$.islh_value) &
       rowSums(!is.na(work[finer])) == 0L
-    filled <- work[
-      placeholder,
-      c(by, ".islh_date", ".islh_value"),
-      drop = FALSE
-    ]
+    filled <- work[placeholder, c(by, ".islh_date"), drop = FALSE]
     work <- work[!placeholder, , drop = FALSE]
+    leftover <- filled[FALSE, , drop = FALSE]
+    if (nrow(filled) > 0L) {
+      sites <- unique(work[c(by, finer)])
+      expanded <- if (length(by) > 0L) {
+        dplyr::inner_join(
+          filled,
+          sites,
+          by = by,
+          relationship = "many-to-many",
+          na_matches = "na"
+        )
+      } else {
+        dplyr::cross_join(filled, sites)
+      }
+      expanded$.islh_value <- rep(NA_real_, nrow(expanded))
+      if ("partial_period" %in% names(work)) {
+        expanded$partial_period <- rep(FALSE, nrow(expanded))
+      }
+      work <- dplyr::bind_rows(work, expanded)
+      # A group with no site rows at all stays unknown at the coarser level.
+      if (length(by) > 0L) {
+        leftover <- filled[
+          is.na(.islh_key_match(filled, sites, by)),
+          ,
+          drop = FALSE
+        ]
+      }
+    }
+    leftover$.islh_value <- rep(NA_real_, nrow(leftover))
     source <- .islh_surv_complete_source(
       work,
       c(by, finer),
@@ -227,7 +254,7 @@
       .islh_value = sum(.data$.islh_value),
       .groups = "drop"
     )
-    work <- as.data.frame(dplyr::bind_rows(work, filled))
+    work <- as.data.frame(dplyr::bind_rows(work, leftover))
   }
   keys <- c(by, ".islh_date")
   if (anyDuplicated(work[keys])) {

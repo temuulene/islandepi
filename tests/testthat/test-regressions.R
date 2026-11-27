@@ -95,9 +95,31 @@ test_that("complementary suppression needs one label for every hidden cell", {
       label = "<5",
       complementary = TRUE
     ),
+    "must not state a numeric bound",
+    class = "islh_error"
+  )
+  expect_error(
+    islh_suppress_table(
+      counts,
+      "cases",
+      threshold = 5,
+      label = "*",
+      complementary = TRUE,
+      complementary_label = "Suppressed"
+    ),
     "must be the same",
     class = "islh_error"
   )
+  # A neutral label is used for every hidden cell without repeating it.
+  starred <- islh_suppress_table(
+    counts,
+    "cases",
+    threshold = 5,
+    inclusive = FALSE,
+    label = "*",
+    complementary = TRUE
+  )
+  expect_equal(starred$cases, c("*", "*", "40"))
   expect_error(
     islh_suppress_table(
       counts,
@@ -473,6 +495,45 @@ test_that("site counts roll up to areas after a site-level check", {
   )
 })
 
+test_that("a coverage gap stays unknown when site counts roll up", {
+  days <- as.Date("2026-07-01") + 0:6
+  events <- data.frame(
+    hsda = "North",
+    site = rep(c("a", "b"), each = 6),
+    day = rep(days[1:6], 2)
+  )
+  sites <- islh_count_events(
+    events,
+    day,
+    by = c(hsda, site),
+    from = days[1],
+    to = days[6]
+  )
+  coverage <- suppressMessages(islh_check_coverage(
+    data.frame(hsda = "North", day = days[1:6]),
+    day,
+    by = hsda,
+    expected = "North",
+    from = days[1],
+    to = days[7]
+  ))
+  for (policy in c("error", "missing")) {
+    out <- suppressMessages(islh_surveillance_snapshot(
+      sites,
+      period_start,
+      count,
+      by = hsda,
+      end = days[7],
+      periods = 7,
+      coverage = coverage,
+      missing_periods = policy
+    ))
+    expect_false(out$complete)
+    expect_true(is.na(out[["2026-07-07"]]))
+    expect_equal(out[["2026-07-01"]], 2)
+  }
+})
+
 test_that("a seven-day daily snapshot fits a weekly baseline on any weekday", {
   withr::local_seed(1)
   events <- data.frame(
@@ -625,6 +686,16 @@ test_that("Farrington refuses an empty table and blanks set-aside weeks", {
     "at least one row",
     class = "islh_error"
   )
+
+  north <- islh_seasons[islh_seasons$hsda == "North Vancouver Island", ]
+  recent <- north$period_start >= as.Date("2025-12-29") &
+    north$period_start <= as.Date("2026-01-19")
+  north$count[recent] <- 0
+  out <- islh_farrington(north, period_start, count, from = "2026-01-19")
+  expect_equal(out$status, "low_count_rule")
+  expect_true(is.na(out$expected))
+  expect_true(is.na(out$upper_limit))
+  expect_true(is.na(out$pvalue))
 })
 
 # Messages -------------------------------------------------------------------

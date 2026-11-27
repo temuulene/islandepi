@@ -61,11 +61,11 @@ islh_dsr_joined <- function(
   ) {
     .islh_abort("{.arg by} must name unique stratum columns.")
   }
-  reserved <- intersect(by, .islh_dsr_detail_columns)
-  if (length(reserved) > 0L || any(startsWith(by, ".islh_"))) {
+  reserved <- by[by %in% .islh_dsr_detail_columns | startsWith(by, ".islh_")]
+  if (length(reserved) > 0L) {
     .islh_abort(c(
       "{.arg by} uses names reserved for the stratum detail.",
-      x = "Reserved: {.val {c(reserved, by[startsWith(by, \".islh_\")])}}.",
+      x = "Reserved: {.val {reserved}}.",
       i = "Rename the key {cli::qty(length(reserved))}column{?s} first."
     ))
   }

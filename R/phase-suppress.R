@@ -30,8 +30,8 @@
 #' different from the small cells: if the small cells show `"<5"` and the
 #' complementary cell shows `"Suppressed"`, a reader knows which is which, and
 #' with a total in view can often work out both values. When `complementary =
-#' TRUE` and `label` is set, `label` and `complementary_label` must be the
-#' same neutral text, such as `"Suppressed"`.
+#' TRUE` and `label` is set, every hidden cell shows `label`, which must be
+#' neutral text such as `"Suppressed"` or `"*"`.
 #'
 #' Whether you need complementary suppression, and how many cells to hide, is a
 #' disclosure policy question rather than a statistical one. Check the rule your
@@ -115,10 +115,11 @@
 #'   See the complementary suppression section. Must be one non-missing `TRUE`
 #'   or `FALSE`.
 #' @param complementary_label Display label for cells hidden to protect another
-#'   cell. Must not imply a value, since such a cell can be any size, and must
-#'   be the same as `label`, so the table does not show which hidden cells are
-#'   small. Only used when `label` is set; with no `label` every suppressed
-#'   cell becomes a missing value and the column stays numeric.
+#'   cell. Defaults to `label`, and must be the same as `label`, so the table
+#'   does not show which hidden cells are small. Neither may imply a value,
+#'   such as `"<5"`, since a complementary cell can be any size. Only used
+#'   when `label` is set; with no `label` every suppressed cell becomes a
+#'   missing value and the column stays numeric.
 #' @param by Optional column names identifying the groups the complementary
 #'   rule applies within. See the groups section. With
 #'   `complementary = FALSE`, `by` only labels the audit record. A grouped
@@ -181,7 +182,7 @@ islh_suppress_table <- function(
   inclusive = TRUE,
   label = NULL,
   complementary = FALSE,
-  complementary_label = "Suppressed",
+  complementary_label = label,
   by = NULL,
   linked = NULL,
   linked_label = NULL
@@ -198,6 +199,9 @@ islh_suppress_table <- function(
     inclusive = inclusive
   )
   if (!is.null(label) && complementary) {
+    # Every hidden cell shows `label`, so it must not state a bound that a
+    # complementary cell could break.
+    .islh_check_suppression_label(label, complementary = TRUE)
     complementary_label <- .islh_check_suppression_label(
       complementary_label,
       arg = "complementary_label",
@@ -208,8 +212,9 @@ islh_suppress_table <- function(
         "{.arg label} and {.arg complementary_label} must be the same.",
         x = "Different labels show which hidden cells are small. With a total
              in view, a reader can then often work out their values.",
-        i = "Use one neutral label for both, such as
-             {.code label = \"Suppressed\"}."
+        i = "Leave {.arg complementary_label} out, so it takes the value of
+             {.arg label}, or set both to one neutral text such as
+             {.val Suppressed}."
       ))
     }
   }

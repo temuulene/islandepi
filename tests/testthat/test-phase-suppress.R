@@ -168,7 +168,7 @@ test_that("a complementary cell never claims to be small", {
       complementary = TRUE,
       label = "<5"
     ),
-    "must be the same"
+    "must not state a numeric bound"
   )
 
   out <- islh_suppress_table(

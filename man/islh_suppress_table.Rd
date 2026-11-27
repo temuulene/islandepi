@@ -11,7 +11,7 @@ islh_suppress_table(
   inclusive = TRUE,
   label = NULL,
   complementary = FALSE,
-  complementary_label = "Suppressed",
+  complementary_label = label,
   by = NULL,
   linked = NULL,
   linked_label = NULL
@@ -41,10 +41,11 @@ See the complementary suppression section. Must be one non-missing \code{TRUE}
 or \code{FALSE}.}
 
 \item{complementary_label}{Display label for cells hidden to protect another
-cell. Must not imply a value, since such a cell can be any size, and must
-be the same as \code{label}, so the table does not show which hidden cells are
-small. Only used when \code{label} is set; with no \code{label} every suppressed
-cell becomes a missing value and the column stays numeric.}
+cell. Defaults to \code{label}, and must be the same as \code{label}, so the table
+does not show which hidden cells are small. Neither may imply a value,
+such as \code{"<5"}, since a complementary cell can be any size. Only used
+when \code{label} is set; with no \code{label} every suppressed cell becomes a
+missing value and the column stays numeric.}
 
 \item{by}{Optional column names identifying the groups the complementary
 rule applies within. See the groups section. With
@@ -87,8 +88,8 @@ because it is small — it can be any size at all. So it must not carry a
 label that states a bound, such as \code{"<5"}. It also must not carry a label
 different from the small cells: if the small cells show \code{"<5"} and the
 complementary cell shows \code{"Suppressed"}, a reader knows which is which, and
-with a total in view can often work out both values. When \code{complementary = TRUE} and \code{label} is set, \code{label} and \code{complementary_label} must be the
-same neutral text, such as \code{"Suppressed"}.
+with a total in view can often work out both values. When \code{complementary = TRUE} and \code{label} is set, every hidden cell shows \code{label}, which must be
+neutral text such as \code{"Suppressed"} or \code{"*"}.
 
 Whether you need complementary suppression, and how many cells to hide, is a
 disclosure policy question rather than a statistical one. Check the rule your

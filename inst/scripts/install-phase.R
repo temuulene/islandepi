@@ -1,6 +1,7 @@
 # Run interactively before rendering; base R only, no pak or compiler.
 # Start a fresh R session first: a package that is already loaded cannot be
-# replaced on Windows, and loading it again would test the old copy.
+# replaced on Windows, and loading it again would test the old copy. Both
+# packages can then be installed one after the other in that session.
 install_phase_zip <- function(zip, package, version, install_dependencies = TRUE,
     lib = path.expand(Sys.getenv("R_LIBS_USER")),
     repos = c(CRAN = "https://cran.r-project.org")) {
@@ -37,14 +38,22 @@ install_phase_zip <- function(zip, package, version, install_dependencies = TRUE
   }
   fields <- intersect(c("Depends", "Imports"), colnames(d))
   requirements <- .phase_requirements(d[1, fields])
-  base <- rownames(utils::installed.packages(priority = c("base", "recommended")))
+  base <- rownames(
+    utils::installed.packages(priority = c("base", "recommended")))
   deps <- setdiff(requirements$package, c("R", base))
 
-  loaded <- intersect(c(package, deps), loadedNamespaces())
-  if (length(loaded) > 0L) {
-    stop("Restart R before installing, then run this first. Already loaded: ",
-      paste(loaded, collapse = ", "), ".", call. = FALSE)
+  if (package %in% loadedNamespaces()) {
+    stop("Restart R before installing ", package, ": it is already loaded.",
+      call. = FALSE)
   }
+  # A dependency loaded by an earlier install in this session, such as the
+  # islandbrand install before islandepi, is kept if it is recent enough.
+  # Reinstalling it would fail on Windows while it is loaded.
+  loaded_deps <- intersect(deps, loadedNamespaces())
+  .phase_check_versions(
+    requirements[requirements$package %in% loaded_deps, , drop = FALSE],
+    .libPaths(), restart = TRUE)
+  deps <- setdiff(deps, loaded_deps)
 
   old_paths <- .libPaths()
   finished <- FALSE
@@ -85,8 +94,9 @@ install_phase_zip <- function(zip, package, version, install_dependencies = TRUE
 .phase_requirements <- function(fields) {
   entries <- trimws(unlist(strsplit(paste(fields, collapse = ","), ",")))
   entries <- entries[nzchar(entries)]
-  rule <- regmatches(entries, regexec(
-    "^([A-Za-z0-9.]+)\\s*(\\(\\s*(>=|<=|==|>|<)\\s*([^) ]+)\\s*\\))?$", entries))
+  pattern <- paste0("^([A-Za-z0-9.]+)\\s*",
+    "(\\(\\s*(>=|<=|==|>|<)\\s*([^) ]+)\\s*\\))?$")
+  rule <- regmatches(entries, regexec(pattern, entries))
   bad <- lengths(rule) == 0L
   if (any(bad)) stop("Cannot read the dependency: ", entries[bad][1])
   data.frame(
@@ -98,13 +108,16 @@ install_phase_zip <- function(zip, package, version, install_dependencies = TRUE
 }
 
 # Every dependency must be installed at a version DESCRIPTION accepts, so an
-# old or offline copy cannot pass for the right one.
-.phase_check_versions <- function(requirements, lib_paths) {
+# old or offline copy cannot pass for the right one. A loaded dependency is
+# judged by the version in use, not the copy on disk.
+.phase_check_versions <- function(requirements, lib_paths, restart = FALSE) {
   for (i in seq_len(nrow(requirements))) {
     name <- requirements$package[i]
     operator <- requirements$operator[i]
     installed <- if (name == "R") {
       getRversion()
+    } else if (name %in% loadedNamespaces()) {
+      package_version(getNamespaceVersion(name))
     } else {
       tryCatch(utils::packageVersion(name, lib.loc = lib_paths),
         error = function(e) NULL)
@@ -113,8 +126,11 @@ install_phase_zip <- function(zip, package, version, install_dependencies = TRUE
     if (nzchar(operator)) {
       needed <- package_version(requirements$version[i])
       if (!isTRUE(do.call(operator, list(installed, needed)))) {
-        stop(name, " ", format(installed), " is installed, but ",
-          operator, " ", format(needed), " is required.")
+        stop(name, " ", format(installed), " is ",
+          if (restart) "loaded" else "installed", ", but ", operator, " ",
+          format(needed), " is required.",
+          if (restart) " Restart R and run the installer first.",
+          call. = FALSE)
       }
     }
   }

@@ -6,10 +6,12 @@
   partner cell when several small cells in a block add up to a value the rule
   would suppress, or to a value with only one solution. For example, two
   hidden cells beside a visible 40 and a total of 42 must both be 1.
-* With `complementary = TRUE` and a `label`, `label` and
-  `complementary_label` must be the same neutral text. Labelling small cells
-  `"<5"` and their partner `"Suppressed"` showed which cell was small, and
-  with a total in view a reader could often work out both values.
+* With `complementary = TRUE` and a `label`, every hidden cell shows the same
+  neutral `label`, such as `"Suppressed"` or `"*"`. `complementary_label` now
+  defaults to `label`, and a different value or a bound such as `"<5"` is
+  refused. Labelling small cells `"<5"` and their partner `"Suppressed"`
+  showed which cell was small, and with a total in view a reader could often
+  work out both values.
 * Counts within floating-point error of a whole number, such as
   `5 + 1e-15`, are rounded before the rule is applied, so they are
   suppressed as the whole number they stand for. `islh_round_base()` rounds a
@@ -61,7 +63,8 @@
   are not consecutive days must name `source_interval`. A group named in
   `groups` with no rows is reported as missing.
 * Count tables record their grouping columns, so site counts can be rolled up
-  to areas. Completeness is checked site by site before the counts are added.
+  to areas. Completeness is checked site by site before the counts are added,
+  and a period that `coverage` marks as unknown stays unknown.
 * `islh_reporting_calendar()` assigns seasons by whole weeks, so each season
   has a week 1, and returns zero rows for empty input.
 * `islh_check_events()` checks every `date_order` rule, including several for
@@ -87,10 +90,12 @@
 
 ## Installing and releasing
 
-* `install-phase.R` stops when the package or a dependency is already loaded,
-  treats any install warning as a failure, checks dependency versions against
-  `DESCRIPTION`, probes the library by writing to it, and restores the library
-  paths when it fails. The install guide says to restart R first.
+* `install-phase.R` stops when the package is already loaded, keeps
+  dependencies an earlier install in the session loaded if they are recent
+  enough, treats any install warning as a failure, checks dependency versions
+  against `DESCRIPTION`, probes the library by writing to it, and restores the
+  library paths when it fails. The install guide says to restart R first and
+  lists the new checksum file.
 * The release workflow is read-only except for the publishing job, pins
   third-party actions to commit hashes, tolerates Windows line endings in the
   version check and publishes `SHA256SUMS.txt`.

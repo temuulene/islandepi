@@ -72,9 +72,9 @@
 #'
 #' @return One row per group and week in `from` to `to`: the grouping
 #'   columns, `period_start`, `observed`, `expected`, `upper_limit`, `alarm`,
-#'   `pvalue` and `status`. `alarm` is `NA` for any week not assessed; see the
-#'   section on weeks that are not assessed. `pvalue` is the model's, and is
-#'   reported even when the low-count rule sets a week aside.
+#'   `pvalue` and `status`. `alarm` is `NA` for any week not assessed, and
+#'   `expected`, `upper_limit` and `pvalue` are `NA` for a week the low-count
+#'   rule sets aside; see the section on weeks that are not assessed.
 #' @export
 #'
 #' @references

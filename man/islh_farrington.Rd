@@ -64,9 +64,9 @@ the timestamps section of \code{\link[=islh_count_events]{islh_count_events()}}.
 \value{
 One row per group and week in \code{from} to \code{to}: the grouping
 columns, \code{period_start}, \code{observed}, \code{expected}, \code{upper_limit}, \code{alarm},
-\code{pvalue} and \code{status}. \code{alarm} is \code{NA} for any week not assessed; see the
-section on weeks that are not assessed. \code{pvalue} is the model's, and is
-reported even when the low-count rule sets a week aside.
+\code{pvalue} and \code{status}. \code{alarm} is \code{NA} for any week not assessed, and
+\code{expected}, \code{upper_limit} and \code{pvalue} are \code{NA} for a week the low-count
+rule sets aside; see the section on weeks that are not assessed.
 }
 \description{
 \code{islh_farrington()} runs the improved Farrington algorithm from the
