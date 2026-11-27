@@ -629,7 +629,7 @@ islh_bc_geography <- function(
     command <- paste0(
       "install.packages(c(",
       paste(sprintf("\"%s\"", missing), collapse = ", "),
-      "), type = \"binary\")"
+      "))"
     )
     .islh_abort(
       c(
@@ -646,10 +646,13 @@ islh_bc_geography <- function(
   tryCatch(
     expr,
     error = function(error) {
+      # The reason goes in as a cli value, so braces in a server's reply are
+      # shown, not evaluated as code.
+      reason <- conditionMessage(error)
       .islh_abort(
         c(
           "The BC Data Catalogue request failed.",
-          x = conditionMessage(error),
+          x = "{reason}",
           i = paste(
             "Confirm that catalogue.data.gov.bc.ca is reachable from your",
             "network, then retry."

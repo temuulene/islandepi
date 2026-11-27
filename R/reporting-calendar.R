@@ -28,7 +28,11 @@
 #'   (a label such as `"2025/26"`), `fiscal_quarter` (1 to 4, counted from
 #'   `fiscal_start_month`) and, with `season_start_month`, `season` (a label
 #'   such as `"2025-26"`) and `season_week` (weeks since the season started,
-#'   counting the week holding the season's first day as 1).
+#'   counting the week holding the season's first day as 1). Seasons follow
+#'   whole weeks: the week holding the season's first day is week 1 of the new
+#'   season, including any days of it that fall before that first day. So
+#'   every date in a week, and the week's `week_start_date`, get the same
+#'   season and season week.
 #' @export
 #'
 #' @examples
@@ -81,24 +85,50 @@ islh_reporting_calendar <- function(
   )
 
   if (!is.null(season_start_month)) {
-    out$season <- .islh_year_label(year, month, season_start_month, "-")
-    first_year <- ifelse(month >= season_start_month, year, year - 1L)
-    season_first <- as.Date(sprintf(
-      "%04d-%02d-01",
-      first_year,
-      season_start_month
-    ))
-    first_week <- .islh_surv_period_start(season_first, "week", week_start)
+    # A season starts with the week that holds its first day, so assign each
+    # date by its week. Labelling by calendar month would split that week
+    # between two seasons and leave the new season without a week 1.
+    week <- out$week_start_date
+    first_week_of <- function(season_year) {
+      .islh_surv_period_start(
+        as.Date(sprintf("%04d-%02d-01", season_year, season_start_month)),
+        "week",
+        week_start
+      )
+    }
+    week_year <- as.integer(format(week, "%Y"))
+    season_year <- ifelse(
+      week >= first_week_of(week_year + 1L),
+      week_year + 1L,
+      ifelse(week >= first_week_of(week_year), week_year, week_year - 1L)
+    )
+    out$season <- .islh_season_label(season_year, season_start_month)
     out$season_week <- as.integer(
-      as.numeric(out$week_start_date - first_week) %/% 7 + 1
+      as.numeric(week - first_week_of(season_year)) %/% 7 + 1
     )
   }
   out
 }
 
+# "2025-26" for a season starting in `season_year`; a season starting in
+# January is just the calendar year.
+.islh_season_label <- function(season_year, start_month) {
+  if (length(season_year) == 0L) {
+    return(character())
+  }
+  if (start_month == 1L) {
+    return(as.character(season_year))
+  }
+  paste0(season_year, "-", sprintf("%02d", (season_year + 1L) %% 100L))
+}
+
 # "2025/26" for a year starting in `start_month`. A year starting in January
 # is just the calendar year.
 .islh_year_label <- function(year, month, start_month, sep) {
+  # paste0() of empty vectors still returns one string.
+  if (length(year) == 0L) {
+    return(character())
+  }
   if (start_month == 1L) {
     return(as.character(year))
   }
@@ -196,6 +226,7 @@ islh_reference_periods <- function(
       !is.numeric(value) ||
         length(value) != 1L ||
         is.na(value) ||
+        !is.finite(value) ||
         value != round(value) ||
         value < minimum
     ) {

@@ -51,7 +51,9 @@ left to \code{required}.}
 be in order, written \code{c(later = "earlier")}. For example,
 \code{c(date_reported = "date_onset")} reports a record whose report date falls
 before its onset date as \code{"date_out_of_order"}. Dates on the same day
-pass.}
+pass. A later date can be checked against several earlier ones by
+repeating its name, as in
+\code{c(date_outcome = "date_onset", date_outcome = "date_admission")}.}
 }
 \value{
 A data frame with \code{.row}, \code{.id}, \code{.issue}, \code{.field} and \code{.value}.

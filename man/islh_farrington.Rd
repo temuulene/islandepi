@@ -106,7 +106,7 @@ the model sees.
 \item \code{"low_count_rule"}: fewer than \code{low_count} cases in the last
 \code{low_count_weeks} weeks, counting the week assessed. The method does not
 assess such weeks, to avoid alarms on very small counts, so \code{alarm},
-\code{expected} and \code{upper_limit} are \code{NA}.
+\code{expected}, \code{upper_limit} and \code{pvalue} are \code{NA}.
 \item \code{"fit_failed"}: the model could not be fitted, and \code{alarm} is \code{NA}.
 }
 

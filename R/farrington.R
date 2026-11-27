@@ -33,7 +33,7 @@
 #' * `"low_count_rule"`: fewer than `low_count` cases in the last
 #'   `low_count_weeks` weeks, counting the week assessed. The method does not
 #'   assess such weeks, to avoid alarms on very small counts, so `alarm`,
-#'   `expected` and `upper_limit` are `NA`.
+#'   `expected`, `upper_limit` and `pvalue` are `NA`.
 #' * `"fit_failed"`: the model could not be fitted, and `alarm` is `NA`.
 #'
 #' A week that was not assessed is not a week without a signal. Show the
@@ -142,6 +142,7 @@ islh_farrington <- function(
       !is.numeric(x) ||
         length(x) != 1L ||
         is.na(x) ||
+        !is.finite(x) ||
         x != round(x) ||
         x < minimum
     ) {
@@ -200,6 +201,9 @@ islh_farrington <- function(
       "{.arg data} must hold weekly counts.",
       i = "The Farrington method here is set up for 52-week years."
     ))
+  }
+  if (nrow(work) == 0L) {
+    .islh_abort("{.arg data} must contain at least one row.")
   }
   # A partial week distorts the model's history as much as the week assessed.
   .islh_surv_check_partial(work)
@@ -266,12 +270,19 @@ islh_farrington <- function(
     ))
   }
 
+  # The model finds comparable weeks from the dates in `epoch`; `start` only
+  # labels the series, so give it in the calendar the weeks follow.
+  start <- if (identical(interval, "epiweek")) {
+    c(lubridate::epiyear(weeks[1]), lubridate::epiweek(weeks[1]))
+  } else {
+    c(lubridate::isoyear(weeks[1]), lubridate::isoweek(weeks[1]))
+  }
   counts <- surveillance::sts(
     observed = observed,
     epoch = as.numeric(weeks),
     epochAsDate = TRUE,
     frequency = 52,
-    start = c(lubridate::isoyear(weeks[1]), lubridate::isoweek(weeks[1]))
+    start = start
   )
   range <- which(weeks >= from & weeks <= to)
   if (min(range) < low_count_weeks) {
@@ -281,23 +292,38 @@ islh_farrington <- function(
            counts up to and including it."
     ))
   }
-  fit <- surveillance::farringtonFlexible(
-    counts,
-    control = list(
-      range = range,
-      limit54 = c(as.integer(low_count), as.integer(low_count_weeks)),
-      b = as.integer(years_back),
-      w = as.integer(window),
-      reweight = TRUE,
-      weightsThreshold = 2.58,
-      alpha = alpha,
-      trend = TRUE,
-      pThresholdTrend = 1,
-      noPeriods = as.integer(no_periods),
-      pastWeeksNotIncluded = as.integer(past_weeks_excluded),
-      thresholdMethod = threshold_method,
-      glmWarnings = FALSE
-    )
+  fit_call <- rlang::current_env()
+  fit <- tryCatch(
+    surveillance::farringtonFlexible(
+      counts,
+      control = list(
+        range = range,
+        limit54 = c(as.integer(low_count), as.integer(low_count_weeks)),
+        b = as.integer(years_back),
+        w = as.integer(window),
+        reweight = TRUE,
+        weightsThreshold = 2.58,
+        alpha = alpha,
+        trend = TRUE,
+        pThresholdTrend = 1,
+        noPeriods = as.integer(no_periods),
+        pastWeeksNotIncluded = as.integer(past_weeks_excluded),
+        thresholdMethod = threshold_method,
+        glmWarnings = FALSE
+      )
+    ),
+    error = function(error) {
+      .islh_abort(
+        c(
+          "The Farrington model could not be run with these settings.",
+          i = "Check that {.arg past_weeks_excluded}, {.arg no_periods},
+               {.arg years_back} and {.arg window} suit the length of
+               {.arg data}."
+        ),
+        parent = error,
+        call = fit_call
+      )
+    }
   )
 
   n_weeks <- length(range)
@@ -333,6 +359,11 @@ islh_farrington <- function(
     ifelse(enough, "fit_failed", "low_count_rule")
   )
   out$alarm[out$status != "assessed"] <- NA
+  # A week the low-count rule set aside has no model estimate to report.
+  set_aside <- out$status == "low_count_rule"
+  out$expected[set_aside] <- NA_real_
+  out$upper_limit[set_aside] <- NA_real_
+  out$pvalue[set_aside] <- NA_real_
   if (length(by_names) > 0L) {
     labels <- groups[out$.islh_group, by_names, drop = FALSE]
     rownames(labels) <- NULL

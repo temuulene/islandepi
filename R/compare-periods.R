@@ -160,6 +160,14 @@ islh_compare_periods <- function(
     ))
   }
 
+  # Each row must be one period. A rolling total, such as seven days summed
+  # into one row, would be compared as if it were a single day.
+  if (!is.null(meta) && !identical(meta$periods, 1L)) {
+    .islh_abort(c(
+      "{.arg data} holds totals over {meta$periods} periods per row.",
+      i = "Compare the period counts from {.fn islh_count_events} instead."
+    ))
+  }
   interval <- .islh_surv_resolve_interval(interval, meta, work$.islh_date)
   if (is.null(interval)) {
     .islh_abort(c(
@@ -302,7 +310,7 @@ islh_compare_periods <- function(
   out <- do.call(rbind, pieces)
 
   out$difference <- out$current - out$reference
-  usable <- !is.na(out$reference) & out$reference > 0
+  usable <- !is.na(out$current) & !is.na(out$reference) & out$reference > 0
   out$ratio <- ifelse(usable, out$current / out$reference, NA_real_)
   limits <- .islh_poisson_ratio_limits(
     ifelse(usable, out$current, 0),
@@ -323,7 +331,8 @@ islh_compare_periods <- function(
     ))
   }
 
-  out <- out[order(match(out$comparison, names(windows))), , drop = FALSE]
+  # In the order the comparisons were asked for.
+  out <- out[order(match(out$comparison, comparison)), , drop = FALSE]
   out <- out[, c(by_names, output_columns), drop = FALSE]
   rownames(out) <- NULL
   out
