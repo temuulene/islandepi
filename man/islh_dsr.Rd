@@ -80,6 +80,9 @@ estimand; do not make area-specific exclusions.
 
 A zero \emph{standard} population is allowed. It gives the stratum a weight of
 zero, which is how a standard population legitimately excludes an age band.
+The \code{cases} and \code{population} columns of the result are still totals over
+every stratum, including excluded ones, so they need not match the strata
+the rate describes. \code{\link[=islh_dsr_detail]{islh_dsr_detail()}} shows each stratum's weight.
 
 Intervals assume independent Poisson counts and fixed denominators.
 Recurrent events may be clustered; accepting these counts does not establish

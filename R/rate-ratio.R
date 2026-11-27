@@ -182,8 +182,9 @@ islh_rate_ratio <- function(
 #' @param conf Confidence level.
 #'
 #' @return A one-row data frame with `rate`, `reference_rate`, `ratio`,
-#'   `lower`, `upper`, `conf`, `method` and `standard_id`. The rates are on
-#'   the `per` scale of the inputs.
+#'   `lower`, `upper`, `conf`, `method`, `per` and `standard_id`. Both rates
+#'   must use the same `per`, and are shown on that scale. `standard_id` is
+#'   missing unless both rates name the same standard.
 #' @export
 #'
 #' @references
@@ -223,14 +224,32 @@ islh_dsr_ratio <- function(x, reference, conf = 0.95) {
   one <- .islh_dsr_parts(x, "x")
   two <- .islh_dsr_parts(reference, "reference")
 
+  # Weights are compared stratum by stratum, matched on the stratum labels.
+  # Sorting them would accept the same numbers attached to different age
+  # groups.
+  at <- match(one$stratum, two$stratum)
   if (
     length(one$weight) != length(two$weight) ||
-      !isTRUE(all.equal(sort(one$weight), sort(two$weight)))
+      anyNA(at) ||
+      !isTRUE(all.equal(one$weight, two$weight[at]))
   ) {
     .islh_abort(c(
       "{.arg x} and {.arg reference} use different standard weights.",
+      x = if (anyNA(at) || length(one$weight) != length(two$weight)) {
+        "Their strata do not match."
+      } else {
+        "The same strata carry different weights."
+      },
       i = "Standardize both to the same standard population and age groups
            before comparing them."
+    ))
+  }
+  if (!isTRUE(all.equal(one$per, two$per))) {
+    .islh_abort(c(
+      "{.arg x} and {.arg reference} use different {.arg per} scales.",
+      x = "{.arg x} is per {format(one$per, scientific = FALSE)} and
+           {.arg reference} is per {format(two$per, scientific = FALSE)}.",
+      i = "Recalculate both with the same {.arg per}."
     ))
   }
   if (
@@ -274,10 +293,13 @@ islh_dsr_ratio <- function(x, reference, conf = 0.95) {
     upper = upper,
     conf = conf,
     method = "Fay F",
-    standard_id = if (is.na(one$standard_id)) {
-      two$standard_id
-    } else {
+    per = one$per,
+    # Only a standard both rates name is reported. Copying one side's label
+    # would claim the unlabelled rate used it too.
+    standard_id = if (identical(one$standard_id, two$standard_id)) {
       one$standard_id
+    } else {
+      NA_character_
     }
   )
 }
@@ -317,7 +339,21 @@ islh_dsr_ratio <- function(x, reference, conf = 0.95) {
     df = if (rate > 0) 2 * rate^2 / variance else 0,
     df_plus = 2 * (rate + w_max)^2 / (variance + w_max^2),
     weight = detail$weight,
+    stratum = .islh_dsr_stratum_labels(detail),
     per = x$per,
     standard_id = x$standard_id
   )
+}
+
+# One label per stratum: the `strata` labels from islh_dsr(), or the key
+# values from islh_dsr_joined(), so the two kinds of result compare.
+.islh_dsr_stratum_labels <- function(detail) {
+  if ("stratum" %in% names(detail)) {
+    return(as.character(detail$stratum))
+  }
+  keys <- setdiff(names(detail), .islh_dsr_detail_columns)
+  if (length(keys) == 1L) {
+    return(as.character(detail[[keys]]))
+  }
+  .islh_key_labels(as.data.frame(detail)[keys], keys)
 }

@@ -153,10 +153,27 @@ islh_compare_outputs <- function(
   key_order <- c(x_key, setdiff(y_key, x_key))
   in_x <- match(key_order, x_key)
   in_y <- match(key_order, y_key)
-  keys <- x[in_x, by, drop = FALSE]
+  # Text and factor keys match as text, so show them as text unless both
+  # tables use the same factor. Assigning a factor into a character column
+  # writes its level codes, and an unknown level into a factor writes NA.
+  x_keys <- as.data.frame(x)[by]
+  y_keys <- as.data.frame(y)[by]
+  for (field in by) {
+    same_factor <- is.factor(x_keys[[field]]) &&
+      is.factor(y_keys[[field]]) &&
+      identical(levels(x_keys[[field]]), levels(y_keys[[field]])) &&
+      identical(is.ordered(x_keys[[field]]), is.ordered(y_keys[[field]]))
+    if (
+      !same_factor && (is.factor(x_keys[[field]]) || is.factor(y_keys[[field]]))
+    ) {
+      x_keys[[field]] <- as.character(x_keys[[field]])
+      y_keys[[field]] <- as.character(y_keys[[field]])
+    }
+  }
+  keys <- x_keys[in_x, , drop = FALSE]
   from_y <- is.na(in_x)
   if (any(from_y)) {
-    keys[from_y, ] <- y[in_y[from_y], by, drop = FALSE]
+    keys[from_y, ] <- y_keys[in_y[from_y], , drop = FALSE]
   }
   rownames(keys) <- NULL
 

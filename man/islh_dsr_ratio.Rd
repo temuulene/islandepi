@@ -16,8 +16,9 @@ standard population.}
 }
 \value{
 A one-row data frame with \code{rate}, \code{reference_rate}, \code{ratio},
-\code{lower}, \code{upper}, \code{conf}, \code{method} and \code{standard_id}. The rates are on
-the \code{per} scale of the inputs.
+\code{lower}, \code{upper}, \code{conf}, \code{method}, \code{per} and \code{standard_id}. Both rates
+must use the same \code{per}, and are shown on that scale. \code{standard_id} is
+missing unless both rates name the same standard.
 }
 \description{
 Compares two rates from \code{\link[=islh_dsr]{islh_dsr()}} or \code{\link[=islh_dsr_joined]{islh_dsr_joined()}} as a ratio with

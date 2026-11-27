@@ -137,8 +137,8 @@ islh_proportion <- function(
     proportion = p * per,
     lower = lower * per,
     upper = upper * per,
-    method = method,
-    conf = conf,
-    per = per
+    method = rep(method, size),
+    conf = rep(conf, size),
+    per = rep(per, size)
   )
 }
