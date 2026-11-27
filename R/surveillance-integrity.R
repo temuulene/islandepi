@@ -302,7 +302,7 @@
   # expected site that sent nothing.
   grid <- .islh_surv_grid(groups %||% unique(work[by]), dates, by)
   names(grid)[names(grid) == "period_start"] <- ".islh_date"
-  work$.islh_present <- TRUE
+  work$.islh_present <- rep(TRUE, nrow(work))
   out <- dplyr::left_join(
     grid,
     work[c(keys, ".islh_value", ".islh_present")],

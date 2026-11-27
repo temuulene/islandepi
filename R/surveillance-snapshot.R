@@ -456,7 +456,7 @@ islh_surveillance_snapshot <- function(
       if (any(duplicate)) {
         .islh_abort("{.arg baseline} must contain one row per group.")
       }
-      baseline$.islh_matched <- TRUE
+      baseline$.islh_matched <- rep(TRUE, nrow(baseline))
       wide <- dplyr::left_join(
         wide,
         baseline,
