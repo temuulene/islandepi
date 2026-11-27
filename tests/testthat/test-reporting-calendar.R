@@ -52,7 +52,7 @@ test_that("seasons are only added on request", {
 test_that("reference periods match the week in each earlier year", {
   ref <- islh_reference_periods("2026-01-26", years_back = 5, window = 2)
   expect_length(ref, 25)
-  expect_true(all(weekdays(ref) == "Monday"))
+  expect_true(all(format(ref, "%u") == "1"))
   expect_true(all(ref < as.Date("2026-01-26")))
   # Each centre is the Monday nearest the same date a year earlier.
   centres <- ref[seq(3, 25, by = 5)]
