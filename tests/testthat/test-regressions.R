@@ -532,6 +532,26 @@ test_that("a coverage gap stays unknown when site counts roll up", {
     expect_true(is.na(out[["2026-07-07"]]))
     expect_equal(out[["2026-07-01"]], 2)
   }
+
+  empty_sites <- sites[FALSE, ]
+  attributes(empty_sites)[c("islh_interval", "islh_by", "islh_periods")] <-
+    attributes(sites)[c("islh_interval", "islh_by", "islh_periods")]
+  empty_coverage <- suppressMessages(islh_check_coverage(
+    data.frame(day = as.Date(character())),
+    day,
+    from = days[1],
+    to = days[7]
+  ))
+  ungrouped <- suppressMessages(islh_surveillance_snapshot(
+    empty_sites,
+    period_start,
+    count,
+    end = days[7],
+    periods = 7,
+    coverage = empty_coverage
+  ))
+  expect_false(ungrouped$complete)
+  expect_true(is.na(ungrouped$total))
 })
 
 test_that("a seven-day daily snapshot fits a weekly baseline on any weekday", {

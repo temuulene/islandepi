@@ -229,6 +229,8 @@
           ,
           drop = FALSE
         ]
+      } else if (nrow(sites) == 0L) {
+        leftover <- filled
       }
     }
     leftover$.islh_value <- rep(NA_real_, nrow(leftover))
